@@ -1,0 +1,12 @@
+.git
+.pytest_cache
+__pycache__
+*.py[cod]
+.env
+database
+face_data
+models
+attacks
+dataset
+.venv
+venv

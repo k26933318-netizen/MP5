@@ -1,0 +1,97 @@
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - voting_mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  face-service:
+    build:
+      context: ./face-service
+    restart: unless-stopped
+    environment:
+      FACE_SERVICE_API_KEY: ${FACE_SERVICE_API_KEY:?Set FACE_SERVICE_API_KEY in .env}
+      FACE_SIMILARITY_THRESHOLD: ${FACE_SIMILARITY_THRESHOLD:-0.50}
+      FACE_MAX_UPLOAD_BYTES: ${FACE_MAX_UPLOAD_BYTES:-5242880}
+      INSIGHTFACE_MODEL_NAME: ${INSIGHTFACE_MODEL_NAME:-buffalo_l}
+      INSIGHTFACE_MODEL_ROOT: /insightface
+      FACE_DETECTION_SIZE: ${FACE_DETECTION_SIZE:-640}
+      FACE_MIN_DETECTION_SCORE: ${FACE_MIN_DETECTION_SCORE:-0.70}
+      FACE_BACKGROUND_MIN_BRIGHTNESS: ${FACE_BACKGROUND_MIN_BRIGHTNESS:-190}
+      FACE_BACKGROUND_MAX_STDDEV: ${FACE_BACKGROUND_MAX_STDDEV:-24}
+      FACE_BACKGROUND_MIN_WHITE_FRACTION: ${FACE_BACKGROUND_MIN_WHITE_FRACTION:-0.60}
+      FACE_DIAGNOSTICS_ENABLED: ${FACE_DIAGNOSTICS_ENABLED:-false}
+      FACE_CENTER_X_TOLERANCE: ${FACE_CENTER_X_TOLERANCE:-0.14}
+      FACE_CENTER_Y_TOLERANCE: ${FACE_CENTER_Y_TOLERANCE:-0.18}
+      FACE_MIN_WIDTH_FRACTION: ${FACE_MIN_WIDTH_FRACTION:-0.24}
+      FACE_MAX_WIDTH_FRACTION: ${FACE_MAX_WIDTH_FRACTION:-0.62}
+      FACE_MAX_ROLL_DEGREES: ${FACE_MAX_ROLL_DEGREES:-12}
+      FACE_MAX_PITCH_DEVIATION: ${FACE_MAX_PITCH_DEVIATION:-0.22}
+      FACE_MAX_YAW_PROXY: ${FACE_MAX_YAW_PROXY:-0.18}
+      FACE_STABILITY_TOLERANCE: ${FACE_STABILITY_TOLERANCE:-0.045}
+      FACE_CHALLENGE_YAW_DELTA: ${FACE_CHALLENGE_YAW_DELTA:-0.14}
+      FACE_CHALLENGE_RETURN_TOLERANCE: ${FACE_CHALLENGE_RETURN_TOLERANCE:-0.08}
+      FACE_CHALLENGE_MIN_DURATION_MS: ${FACE_CHALLENGE_MIN_DURATION_MS:-1500}
+      FACE_CHALLENGE_FRAMES_PER_STAGE: ${FACE_CHALLENGE_FRAMES_PER_STAGE:-3}
+      FACE_CHALLENGE_TTL_SECONDS: ${FACE_CHALLENGE_TTL_SECONDS:-90}
+      FACE_ANTISPOOF_THRESHOLD: ${FACE_ANTISPOOF_THRESHOLD:-0.70}
+      FACE_ANTISPOOF_MIN_FRAME: ${FACE_ANTISPOOF_MIN_FRAME:-0.50}
+      FACE_REQUIRE_ANTISPOOF: ${FACE_REQUIRE_ANTISPOOF:-true}
+      FACE_ANTISPOOF_MODEL_A_PATH: /anti-spoof/minifasnet_a.onnx
+      FACE_ANTISPOOF_MODEL_B_PATH: /anti-spoof/minifasnet_b.onnx
+    volumes:
+      - type: bind
+        source: ${INSIGHTFACE_MODEL_ROOT:?Set INSIGHTFACE_MODEL_ROOT in .env}
+        target: /insightface
+        read_only: true
+      - type: bind
+        source: ${FACE_ANTISPOOF_MODEL_DIR:?Set FACE_ANTISPOOF_MODEL_DIR in .env}
+        target: /anti-spoof
+        read_only: true
+    expose:
+      - "8000"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      face-service:
+        condition: service_started
+    environment:
+      PORT: 3000
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-voting_system}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      FACE_SERVICE_URL: http://face-service:8000
+      FACE_SERVICE_API_KEY: ${FACE_SERVICE_API_KEY:?Set FACE_SERVICE_API_KEY in .env}
+      FACE_ENCRYPTION_KEY: ${FACE_ENCRYPTION_KEY:?Set FACE_ENCRYPTION_KEY in .env}
+      FACE_ENCRYPTION_KEY_VERSION: ${FACE_ENCRYPTION_KEY_VERSION:-1}
+      FACE_SIMILARITY_THRESHOLD: ${FACE_SIMILARITY_THRESHOLD:-0.50}
+      FACE_VERIFICATION_TTL_MS: ${FACE_VERIFICATION_TTL_MS:-180000}
+      FACE_CHALLENGE_TTL_SECONDS: ${FACE_CHALLENGE_TTL_SECONDS:-90}
+      FACE_CHALLENGE_FRAMES_PER_STAGE: ${FACE_CHALLENGE_FRAMES_PER_STAGE:-3}
+      FACE_CHALLENGE_MIN_DURATION_MS: ${FACE_CHALLENGE_MIN_DURATION_MS:-1500}
+      BLOCKCHAIN_BACKEND: ${BLOCKCHAIN_BACKEND:-local}
+      FABRIC_MSP_ID: ${FABRIC_MSP_ID:-Org1MSP}
+      FABRIC_CHANNEL: ${FABRIC_CHANNEL:-votingchannel}
+      FABRIC_CHAINCODE: ${FABRIC_CHAINCODE:-voting-chaincode}
+      FABRIC_PEER_ENDPOINT: ${FABRIC_DOCKER_PEER_ENDPOINT:-host.docker.internal:7051}
+      FABRIC_PEER_HOST_ALIAS: ${FABRIC_PEER_HOST_ALIAS:-peer0.org1.example.com}
+      FABRIC_TLS_CERT_PATH: /fabric/peer-ca.pem
+      FABRIC_CERT_PATH: /fabric/user-cert.pem
+      FABRIC_KEY_DIR: /fabric/keystore
+    ports:
+      - "3000:3000"
+
+volumes:
+  voting_mongodb:

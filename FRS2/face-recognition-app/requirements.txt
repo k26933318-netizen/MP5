@@ -1,0 +1,10 @@
+# Use CPython 3.11 or 3.12 on Windows for broad native-wheel compatibility.
+Flask==3.1.3
+insightface==2.0.0
+faiss-cpu==1.15.1
+opencv-python==5.0.0.93
+numpy==2.5.3
+onnxruntime==1.30.0
+waitress==3.0.2
+cryptography==50.0.2
+PyJWT==2.15.1

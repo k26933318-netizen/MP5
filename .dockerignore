@@ -1,0 +1,8 @@
+.env
+.git
+node_modules
+**/node_modules
+face-service/.venv
+face-service/**/__pycache__
+face-service/models
+backend/data/votes.ndjson

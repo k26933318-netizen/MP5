@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f5">
+  <title>Verify | FaceVerify</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-mode="identify">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="FaceVerify home"><span class="brand-mark" aria-hidden="true">FV</span><span class="brand-name">FaceVerify<small>IDENTITY CHECK</small></span></a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/" {% if active_page == 'home' %}aria-current="page"{% endif %}>Home</a>
+      <a href="/enroll" {% if active_page == 'enroll' %}aria-current="page"{% endif %}>Enroll</a>
+      <a href="/verify" {% if active_page == 'verify' %}aria-current="page"{% endif %}>Verify</a>
+    </nav>
+  </header>
+  <main class="page-shell">
+    <div class="page-heading">
+      <p class="eyebrow">Identity check</p>
+      <h1>Verify your identity</h1>
+      <p>Follow the on-screen prompts while the camera checks your face.</p>
+    </div>
+    <section class="capture-card" aria-labelledby="capture-title">
+      <div class="capture-layout">
+        <div class="camera-column">
+          <h2 id="capture-title">Camera preview</h2>
+          <div class="video-frame" id="camera-frame" data-state="idle">
+            <video id="video" autoplay muted playsinline aria-label="Live camera preview"></video>
+            <div class="face-guide" aria-hidden="true"></div>
+            <div class="camera-shade" aria-hidden="true"></div>
+          </div>
+          <p class="camera-status" id="camera-status" data-kind="info" role="status" aria-live="polite"><span class="status-icon" id="camera-status-icon" aria-hidden="true">i</span><span id="camera-status-text">Face the camera directly in good lighting.</span></p>
+        </div>
+        <div class="form-column">
+          <button class="primary-button" id="primary-action" type="button"><span class="button-spinner" aria-hidden="true" hidden></span><span id="action-label">Start camera</span></button>
+          <div class="message message--info" id="result" role="status" aria-live="polite" hidden><span class="message-icon" aria-hidden="true">i</span><span id="result-text"></span></div>
+          <p class="privacy-note">A live camera check compares your face with active enrolled profiles.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><span>FaceVerify</span><span>Secure identity verification</span></footer>
+  <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

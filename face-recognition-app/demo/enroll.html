@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f5">
+  <title>Enroll | FaceVerify</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-mode="enroll">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="FaceVerify home"><span class="brand-mark" aria-hidden="true">FV</span><span class="brand-name">FaceVerify<small>IDENTITY CHECK</small></span></a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/" {% if active_page == 'home' %}aria-current="page"{% endif %}>Home</a>
+      <a href="/enroll" {% if active_page == 'enroll' %}aria-current="page"{% endif %}>Enroll</a>
+      <a href="/verify" {% if active_page == 'verify' %}aria-current="page"{% endif %}>Verify</a>
+    </nav>
+  </header>
+  <main class="page-shell">
+    <div class="page-heading">
+      <p class="eyebrow">New face profile</p>
+      <h1>Enroll your face</h1>
+      <p>Capture a few live frames to create a profile for future identity checks.</p>
+    </div>
+    <section class="capture-card" aria-labelledby="capture-title">
+      <div class="capture-layout">
+        <div class="camera-column" style="--tracer-searching: {{ tracer_config.colors.searching }}; --tracer-hold: {{ tracer_config.colors.hold }}; --tracer-verified: {{ tracer_config.colors.verified }}; --tracer-failed: {{ tracer_config.colors.failed }}; --tracer-bracket-size: {{ tracer_config.bracket_size * 100 }}%; --tracer-thickness: {{ tracer_config.thickness }}px; --tracer-transition: {{ tracer_config.state_transition_ms }}ms">
+          <h2 id="capture-title">Camera preview</h2>
+          <div class="video-frame" id="camera-frame" data-state="idle" data-tracer-style="{{ tracer_config.style }}" data-track-face-box="{{ 'true' if tracer_config.track_face_box else 'false' }}" data-track-mode="{{ tracer_config.track_mode }}" data-tracking-config='{{ tracer_config.tracking | tojson }}'>
+            <video id="video" autoplay muted playsinline aria-label="Live camera preview"></video>
+            <img class="face-shape-overlay" id="face-shape-overlay" alt="" aria-hidden="true" hidden>
+            <div class="face-guide" aria-hidden="true">
+              <span class="scanner-sweep"></span>
+              <span class="scanner-check"></span>
+            </div>
+            <div class="camera-shade" aria-hidden="true"></div>
+          </div>
+          <p class="camera-status" id="camera-status" data-kind="info" role="status" aria-live="polite"><span class="status-icon" id="camera-status-icon" aria-hidden="true">i</span><span id="camera-status-text">Looking for face</span></p>
+        </div>
+        <div class="form-column">
+          <label class="field-label" for="subject">ID number</label>
+          <input id="subject" name="subject_id" type="text" maxlength="128" autocomplete="off" autocapitalize="off" spellcheck="false" pattern="[A-Za-z0-9_.:-]{1,128}" aria-describedby="id-help" required>
+          <p class="field-help" id="id-help">Use letters, numbers, periods, underscores, colons, or hyphens.</p>
+          <label class="consent-row" for="consent"><input id="consent" name="consent" type="checkbox"><span>I consent to using my face to verify my identity.</span></label>
+          <button class="primary-button" id="primary-action" type="button"><span class="button-spinner" aria-hidden="true" hidden></span><span id="action-label">Start camera</span></button>
+          <div class="message message--info" id="result" role="status" aria-live="polite" hidden><span class="message-icon" aria-hidden="true">i</span><span id="result-text"></span></div>
+          <p class="privacy-note">Your camera frames are processed for this check and are not saved as images.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><span>FaceVerify</span><span>Secure identity verification</span></footer>
+  <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

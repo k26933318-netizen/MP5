@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f5">
+  <title>FaceVerify | Identity check</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="FaceVerify home"><span class="brand-mark" aria-hidden="true">FV</span><span class="brand-name">FaceVerify<small>IDENTITY CHECK</small></span></a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/" aria-current="page">Home</a>
+      <a href="/enroll">Enroll</a>
+      <a href="/verify">Verify</a>
+    </nav>
+  </header>
+  <main class="page-shell home-shell">
+    <section class="welcome-panel">
+      <p class="eyebrow">Private identity check</p>
+      <h1>Face recognition,<br>made straightforward.</h1>
+      <p>Enroll a face profile, then verify it with a live camera check.</p>
+      <div class="home-actions"><a class="primary-link" href="/enroll">Enroll a face <span aria-hidden="true">→</span></a><a class="secondary-link" href="/verify">Verify identity <span aria-hidden="true">→</span></a></div>
+    </section>
+    <p class="home-note"><span aria-hidden="true">i</span> Camera access is available on localhost or over HTTPS.</p>
+  </main>
+  <footer class="site-footer"><span>FaceVerify</span><span>Secure identity verification</span></footer>
+</body>
+</html>

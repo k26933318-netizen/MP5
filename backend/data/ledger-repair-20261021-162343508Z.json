@@ -1,0 +1,62 @@
+{
+  "action": "Repaired broken local hash-chain links; vote contents were preserved.",
+  "electionId": "TN-ASSEMBLY-2026",
+  "repairedAt": "2026-10-21T16:23:43.531Z",
+  "backupFile": "votes.ndjson.backup-20261021-162343508Z",
+  "before": {
+    "status": "FAILED",
+    "recordsChecked": 8,
+    "invalidHashes": 0,
+    "brokenLinks": 1,
+    "invalidTransactions": 0
+  },
+  "after": {
+    "status": "VALID",
+    "recordsChecked": 8,
+    "invalidHashes": 0,
+    "brokenLinks": 0,
+    "invalidTransactions": 0
+  },
+  "repairedRecords": [
+    {
+      "recordInElection": 4,
+      "transactionId": "local_47250ee168bb9de42f946b62",
+      "oldPreviousHash": "f9f2c9bda208c3ea7a05a9d3b73a8fea8f79a6d6bec3d8c8ecfa957caede4e0c",
+      "newPreviousHash": "053c95266621e0be175684ff5dfd0f77ec07ba6ad35dff356a6404df34e2c74b",
+      "oldRecordHash": "cc42ff2484928f0d959e972527b5229e0171fd4f0132ddf298f8ec6b66eaafcc",
+      "newRecordHash": "664cd9dc178821a74311f19bd6b50278fc7a03661a3c2fd4882dddc6e582faee"
+    },
+    {
+      "recordInElection": 5,
+      "transactionId": "local_56c624499a457425580a837f",
+      "oldPreviousHash": "cc42ff2484928f0d959e972527b5229e0171fd4f0132ddf298f8ec6b66eaafcc",
+      "newPreviousHash": "664cd9dc178821a74311f19bd6b50278fc7a03661a3c2fd4882dddc6e582faee",
+      "oldRecordHash": "6c1fc0fdf6654379316236dc98f6cf7bb9245e9cc016d1fc82c4800e61685fb9",
+      "newRecordHash": "aadecc3c371cf916fee64d9a6a61677dc029b0393aecc3c0f17c99fdd58ef0e8"
+    },
+    {
+      "recordInElection": 6,
+      "transactionId": "local_777bfc0ad3fd7603281e3470",
+      "oldPreviousHash": "6c1fc0fdf6654379316236dc98f6cf7bb9245e9cc016d1fc82c4800e61685fb9",
+      "newPreviousHash": "aadecc3c371cf916fee64d9a6a61677dc029b0393aecc3c0f17c99fdd58ef0e8",
+      "oldRecordHash": "8af7f5cb8fbd124472e607f24d93d6cc808a1fdf5497966f9234785c9106c333",
+      "newRecordHash": "57b566e15e7b7916dff772fcd5a90820286a1051bb02d07edd2dd7bdae9d70a4"
+    },
+    {
+      "recordInElection": 7,
+      "transactionId": "local_dc1ec551643673828cb6f98b",
+      "oldPreviousHash": "8af7f5cb8fbd124472e607f24d93d6cc808a1fdf5497966f9234785c9106c333",
+      "newPreviousHash": "57b566e15e7b7916dff772fcd5a90820286a1051bb02d07edd2dd7bdae9d70a4",
+      "oldRecordHash": "e26c1fcebb46c26064fcc9b0fdac8d87527ec6b39242017fc480af2c48bef11d",
+      "newRecordHash": "8383c40994fd1e82d64d5980e1014e41a683d99f7661c69257ea2ae2cbe1688f"
+    },
+    {
+      "recordInElection": 8,
+      "transactionId": "local_1c5a84872e17c0de071eae0a",
+      "oldPreviousHash": "e26c1fcebb46c26064fcc9b0fdac8d87527ec6b39242017fc480af2c48bef11d",
+      "newPreviousHash": "8383c40994fd1e82d64d5980e1014e41a683d99f7661c69257ea2ae2cbe1688f",
+      "oldRecordHash": "794c62b6b166b9d8f868d94eab3a010b8d5c752a22df9e0c0b9426396cf08af1",
+      "newRecordHash": "6950c650918c2fc21380607594c5c4535057045ac9240ecc0d45c5f800e50c71"
+    }
+  ]
+}

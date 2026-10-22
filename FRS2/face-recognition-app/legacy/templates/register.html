@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Register face</title><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"></head>
+<body><main class="panel"><nav><a href="/">Home</a> <a href="/verify">Verify</a></nav><p class="eyebrow">New profile</p><h1>Register a face</h1><label for="name">Name</label><input id="name" type="text" placeholder="Enter a name" autocomplete="off"><p class="tip">Face the camera directly and use good lighting before capturing.</p><video id="video" autoplay playsinline></video><canvas id="canvas" hidden></canvas><div class="actions"><button id="start-camera" type="button">Open webcam</button><button id="retake" type="button" hidden>Retake</button></div><p id="status" class="status" role="status">Click Open webcam to begin.</p><p id="result" class="result" role="status"></p></main><script src="{{ url_for('static', filename='js/camera.js') }}"></script><script>setupCamera({ endpointUrl: "/register", captureCount: 4, extraFields: () => ({ name: document.querySelector("#name").value.trim() }) });</script></body>
+</html>
