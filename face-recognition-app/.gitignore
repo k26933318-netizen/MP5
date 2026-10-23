@@ -1,0 +1,8 @@
+database/
+face_data/
+*.db
+*.index
+.env
+models/
+attacks/
+dataset/

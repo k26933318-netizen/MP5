@@ -1,0 +1,187 @@
+openapi: 3.1.0
+info:
+  title: Face Verification Service
+  version: 1.0.0
+  description: Enrollment, ID-free 1:N face identification, claimed-subject 1:1 verification, and liveness.
+servers:
+  - url: https://face.example
+paths:
+  /api/v1/sessions:
+    post:
+      security: [{ ApiKey: [] }]
+      summary: Create an enrollment, verification, or identification session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose]
+              properties:
+                subject_id: { type: string, pattern: '^[A-Za-z0-9_.:-]{1,128}$', description: Required for enroll and verify; omit for identify. }
+                purpose: { type: string, enum: [enroll, verify, identify] }
+                ttl_sec: { type: integer, minimum: 1 }
+                allow_replace: { type: boolean }
+                metadata: { type: object }
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session_id, expires_at, challenge_required]
+                properties:
+                  session_id: { type: string }
+                  expires_at: { type: number }
+                  challenge_required: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/sessions/{session_id}/result:
+    get:
+      security: [{ ApiKey: [] }]
+      summary: Read terminal backend result
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Detailed backend decision, scores, and optional token }
+        '404': { description: Session is not terminal or does not exist }
+  /api/v1/session/challenge:
+    get:
+      security: [{ SessionId: [] }]
+      summary: Issue two distinct action prompts
+      responses:
+        '200':
+          description: Challenge actions and expiry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challenge_id: { type: string }
+                  actions: { type: array, minItems: 2, maxItems: 2, uniqueItems: true, items: { type: string, enum: [blink, turn_left, turn_right] } }
+                  expires_in: { type: integer }
+  /api/v1/session/preview:
+    post:
+      security: [{ SessionId: [] }]
+      summary: Request face-position guidance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [frame]
+              properties:
+                frame: { type: string, description: JPEG data URL or base64 }
+      responses:
+        '200': { description: Face readiness guidance, no scores }
+  /api/v1/session/submit:
+    post:
+      security: [{ SessionId: [] }]
+      summary: Submit face frames for enrollment, verification, or identification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [frames]
+              properties:
+                frames: { type: array, minItems: 1, items: { type: string } }
+                consent: { type: boolean }
+                challenge_id: { type: string }
+      responses:
+        '200': { description: Browser-safe decision and message; identified_subject_id is included only on a successful identify match }
+        '400': { description: Invalid request or image }
+        '410': { description: Session expired }
+        '503': { description: Required anti-spoofing models are unavailable }
+  /api/v1/subjects:
+    get:
+      security: [{ ApiKey: [] }]
+      summary: List opaque subject records
+      responses:
+        '200': { description: Subject IDs and status only; embeddings are never returned }
+  /api/v1/subjects/{subject_id}:
+    get:
+      security: [{ ApiKey: [] }]
+      summary: Get subject metadata
+      parameters:
+        - in: path
+          name: subject_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Subject metadata without vectors }
+        '404': { description: Not found }
+    delete:
+      security: [{ ApiKey: [] }]
+      summary: Delete a subject and embeddings
+      parameters:
+        - in: path
+          name: subject_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+        '404': { description: Not found }
+  /api/v1/subjects/{subject_id}/unlock:
+    post:
+      security: [{ ApiKey: [] }]
+      summary: Unlock a subject with an audited reason
+      parameters:
+        - in: path
+          name: subject_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string } } }
+      responses:
+        '200': { description: Unlocked }
+        '404': { description: Not found }
+  /api/v1/tokens/introspect:
+    post:
+      security: [{ ApiKey: [] }]
+      summary: Validate or atomically consume a one-use JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                consume: { type: boolean, default: false }
+      responses:
+        '200': { description: Active token claims or active false }
+  /api/v1/health:
+    get:
+      security: [{ ApiKey: [] }]
+      summary: Authenticated health check
+      responses:
+        '200': { description: Service status }
+  /api/v1/config:
+    get:
+      security: [{ ApiKey: [] }]
+      summary: Safe runtime configuration
+      responses:
+        '200': { description: Model/profile and public thresholds }
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    SessionId:
+      type: apiKey
+      in: header
+      name: X-Session-Id
+  responses:
+    Unauthorized:
+      description: Service API key required

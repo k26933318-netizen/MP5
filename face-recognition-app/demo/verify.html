@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f5">
+  <title>Verify | FaceVerify</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-mode="identify">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="FaceVerify home"><span class="brand-mark" aria-hidden="true">FV</span><span class="brand-name">FaceVerify<small>IDENTITY CHECK</small></span></a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/" {% if active_page == 'home' %}aria-current="page"{% endif %}>Home</a>
+      <a href="/enroll" {% if active_page == 'enroll' %}aria-current="page"{% endif %}>Enroll</a>
+      <a href="/verify" {% if active_page == 'verify' %}aria-current="page"{% endif %}>Verify</a>
+    </nav>
+  </header>
+  <main class="page-shell">
+    <div class="page-heading">
+      <p class="eyebrow">Identity check</p>
+      <h1>Verify your identity</h1>
+      <p>Follow the on-screen prompts while the camera checks your face.</p>
+    </div>
+    <section class="capture-card" aria-labelledby="capture-title">
+      <div class="capture-layout">
+        <div class="camera-column" style="--tracer-searching: {{ tracer_config.colors.searching }}; --tracer-hold: {{ tracer_config.colors.hold }}; --tracer-verified: {{ tracer_config.colors.verified }}; --tracer-failed: {{ tracer_config.colors.failed }}; --tracer-bracket-size: {{ tracer_config.bracket_size * 100 }}%; --tracer-thickness: {{ tracer_config.thickness }}px; --tracer-transition: {{ tracer_config.state_transition_ms }}ms">
+          <div class="camera-heading">
+            <h2 id="capture-title">Camera preview</h2>
+            <button class="notice-reopen" id="notice-reopen" type="button" aria-label="{{ white_background_text.notice_reopen }}" title="{{ white_background_text.notice_reopen }}">i</button>
+          </div>
+          <section class="background-notice" id="background-notice" aria-labelledby="background-notice-title" data-session-key="faceverify-white-background-notice">
+            <span class="notice-info-icon" aria-hidden="true">i</span>
+            <div class="background-notice-copy">
+              <h3 id="background-notice-title">{{ white_background_text.notice_title }}</h3>
+              <p>{{ white_background_text.notice_line_1 }}</p>
+              <p>{{ white_background_text.notice_line_2 }}</p>
+              <button class="notice-start" id="notice-start" type="button">{{ white_background_text.notice_button }}</button>
+            </div>
+          </section>
+          <div class="video-frame" id="camera-frame" data-state="idle" data-show-debug-info="{{ 'true' if show_debug_info else 'false' }}" data-low-quality-score-threshold="{{ low_quality_score_threshold }}" data-check-white-background="{{ 'true' if check_white_background else 'false' }}" data-white-background-check-interval-ms="{{ white_background_check_interval_ms }}" data-white-background-min-brightness="{{ white_background_min_brightness }}" data-white-background-max-variation="{{ white_background_max_variation }}" data-white-background-running-hint="{{ white_background_text.running_hint }}" data-white-background-check-hint="{{ white_background_text.check_hint }}" data-tracer-style="{{ tracer_config.style }}" data-track-face-box="{{ 'true' if tracer_config.track_face_box else 'false' }}" data-track-mode="{{ tracer_config.track_mode }}" data-tracking-config='{{ tracer_config.tracking | tojson }}'>
+            <video id="video" autoplay muted playsinline aria-label="Live camera preview"></video>
+            <img class="face-shape-overlay" id="face-shape-overlay" alt="" aria-hidden="true" hidden>
+            <div class="face-guide" aria-hidden="true">
+              <span class="scanner-sweep"></span>
+              <span class="scanner-check"></span>
+            </div>
+            <div class="camera-shade" aria-hidden="true"></div>
+            <div class="liveness-debug-panel" id="liveness-debug-panel" aria-live="off" hidden></div>
+          </div>
+          <p class="camera-status" id="camera-status" data-kind="info" role="status" aria-live="polite"><span class="status-icon" id="camera-status-icon" aria-hidden="true">i</span><span id="camera-status-text">Looking for face</span></p>
+          <p class="camera-hint" id="camera-hint" hidden></p>
+        </div>
+        <div class="form-column">
+          <button class="primary-button" id="primary-action" type="button"><span class="button-spinner" aria-hidden="true" hidden></span><span id="action-label">Start camera</span></button>
+          <div class="message message--info" id="result" role="status" aria-live="polite" hidden><span class="message-icon" aria-hidden="true">i</span><span id="result-text"></span></div>
+          <p class="privacy-note">A live camera check compares your face with active enrolled profiles.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><span>FaceVerify</span><span>Secure identity verification</span></footer>
+  <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

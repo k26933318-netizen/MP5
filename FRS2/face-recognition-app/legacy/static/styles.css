@@ -1,0 +1,11 @@
+:root { font-family: Georgia, serif; color: #202124; background: #edf1e8; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+.panel { width: min(92vw, 38rem); padding: 3rem; background: #fffdf7; border: 1px solid #cad4c0; box-shadow: 10px 10px 0 #cad4c0; }
+nav { display: flex; justify-content: flex-end; gap: 1rem; } a { color: #285943; }
+h1 { font-size: clamp(2rem, 8vw, 4rem); line-height: .95; margin: 1.5rem 0 2rem; }
+.eyebrow { color: #285943; text-transform: uppercase; letter-spacing: .12em; font: .75rem Arial, sans-serif; }
+label { display: block; margin-bottom: .5rem; font-size: 1.1rem; } input { box-sizing: border-box; width: 100%; padding: .8rem; border: 1px solid #839481; background: #f5f8f1; font: inherit; }
+video { display: block; width: 100%; margin: 1.5rem 0; aspect-ratio: 4 / 3; object-fit: cover; background: #dce4d7; }
+.actions { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.5rem; } button, .button { width: fit-content; padding: .8rem 1.2rem; border: 0; background: #285943; color: white; cursor: pointer; font: inherit; text-decoration: none; } button:disabled { opacity: .45; cursor: not-allowed; } .secondary { background: #7f5947; }
+.result { min-height: 1.5em; margin-top: 1.5rem; color: #285943; }
+.status, .result { min-height: 1.5em; margin-top: 1rem; color: #285943; }

@@ -1,0 +1,11 @@
+{
+  "name": "voting-chaincode",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": { "test": "node --test" },
+  "dependencies": {
+    "fabric-contract-api": "^2.5.5",
+    "fabric-shim": "^2.5.5"
+  }
+}

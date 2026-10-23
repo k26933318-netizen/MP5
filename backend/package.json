@@ -1,0 +1,19 @@
+{
+  "name": "voting-blockchain-backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@hyperledger/fabric-gateway": "^1.8.0",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.1.3",
+    "multer": "^2.0.2",
+    "mongodb": "^7.6.0"
+  }
+}

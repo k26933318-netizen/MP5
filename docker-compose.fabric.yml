@@ -1,0 +1,20 @@
+services:
+  backend:
+    environment:
+      BLOCKCHAIN_BACKEND: fabric
+      FABRIC_TLS_CERT_PATH: /fabric/peer-ca.pem
+      FABRIC_CERT_PATH: /fabric/user-cert.pem
+      FABRIC_KEY_DIR: /fabric/keystore
+    volumes:
+      - type: bind
+        source: ${FABRIC_TLS_CERT_PATH:?Set FABRIC_TLS_CERT_PATH in .env}
+        target: /fabric/peer-ca.pem
+        read_only: true
+      - type: bind
+        source: ${FABRIC_CERT_PATH:?Set FABRIC_CERT_PATH in .env}
+        target: /fabric/user-cert.pem
+        read_only: true
+      - type: bind
+        source: ${FABRIC_KEY_DIR:?Set FABRIC_KEY_DIR in .env}
+        target: /fabric/keystore
+        read_only: true

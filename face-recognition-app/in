@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f5">
+  <title>Verify | FaceVerify</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-mode="identify">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="FaceVerify home"><span class="brand-mark" aria-hidden="true">FV</span><span class="brand-name">FaceVerify<small>IDENTITY CHECK</small></span></a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="/" >Home</a>
+      <a href="/enroll" >Enroll</a>
+      <a href="/verify" aria-current="page">Verify</a>
+    </nav>
+  </header>
+  <main class="page-shell">
+    <div class="page-heading">
+      <p class="eyebrow">Identity check</p>
+      <h1>Verify your identity</h1>
+      <p>Follow the on-screen prompts while the camera checks your face.</p>
+    </div>
+    <section class="capture-card" aria-labelledby="capture-title">
+      <div class="capture-layout">
+        <div class="camera-column" style="--tracer-searching: #f1f4f8; --tracer-hold: #82b3df; --tracer-verified: #7ebf9a; --tracer-failed: #cf7b81; --tracer-bracket-size: 18.0%; --tracer-thickness: 2px; --tracer-transition: 200ms">
+          <h2 id="capture-title">Camera preview</h2>
+          <div class="video-frame" id="camera-frame" data-state="idle" data-tracer-style="modern" data-track-face-box="true" data-box-smoothing="0.25" data-box-dead-zone="2" data-box-padding="18.0" data-box-hold="400" data-box-fade="180">
+            <video id="video" autoplay muted playsinline aria-label="Live camera preview"></video>
+            <img class="face-shape-overlay" id="face-shape-overlay" alt="" aria-hidden="true" hidden>
+            <div class="face-guide" aria-hidden="true">
+              <span class="scanner-sweep"></span>
+              <span class="scanner-check"></span>
+            </div>
+            <div class="camera-shade" aria-hidden="true"></div>
+            <div class="liveness-overlay" id="liveness-overlay" aria-live="polite" hidden></div>
+          </div>
+          <p class="camera-status" id="camera-status" data-kind="info" role="status" aria-live="polite"><span class="status-icon" id="camera-status-icon" aria-hidden="true">i</span><span id="camera-status-text">Looking for face</span></p>
+        </div>
+        <div class="form-column">
+          <button class="primary-button" id="primary-action" type="button"><span class="button-spinner" aria-hidden="true" hidden></span><span id="action-label">Start camera</span></button>
+          <div class="message message--info" id="result" role="status" aria-live="polite" hidden><span class="message-icon" aria-hidden="true">i</span><span id="result-text"></span></div>
+          <p class="privacy-note">A live camera check compares your face with active enrolled profiles.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><span>FaceVerify</span><span>Secure identity verification</span></footer>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

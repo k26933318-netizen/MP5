@@ -1,0 +1,9 @@
+{
+  "name": "blockchain-voting-module",
+  "private": true,
+  "scripts": {
+    "start": "node backend/server.js",
+    "test": "node --test"
+  },
+  "workspaces": ["backend", "blockchain/chaincode/voting-chaincode"]
+}

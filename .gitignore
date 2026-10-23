@@ -1,0 +1,15 @@
+.env
+node_modules/
+**/.venv/
+face-service/.venv/
+face-service/__pycache__/
+face-service/**/__pycache__/
+face-service/models/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.pyc.*
+backend/data/test-votes.ndjson
+backend/data/votes.ndjson
+backend/data/votes.ndjson.backup-*
+backend/data/ledger-repair-*.json
