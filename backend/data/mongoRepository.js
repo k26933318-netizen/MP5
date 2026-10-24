@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
-const databaseName = process.env.MONGODB_DATABASE || 'voting_system';
+const databaseName = process.env.MONGODB_DATABASE || 'VotingSystem';
 const FACE_ENROLLMENT_LOCK_ID = 'face-enrollment';
 const FACE_ENROLLMENT_LOCK_LEASE_MS = 2 * 60 * 1000;
 const FACE_ENROLLMENT_LOCK_WAIT_MS = 30 * 1000;
