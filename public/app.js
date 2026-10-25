@@ -733,10 +733,10 @@ function legacyCameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel
 
 function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSuccess, onBack, mode }) {
   const enrollmentMode = mode === 'enroll' || mode === 'registration';
-  const backgroundTip = enrollmentMode
+  const cameraTip = enrollmentMode
     ? 'Use even lighting; your background does not need to be white.'
     : 'Use a plain white, evenly lit background.';
-  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>${backgroundTip}</li><li>Keep only one face in the camera view.</li><li>Keep your face inside the guide.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera to receive live positioning instructions.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
+  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>${cameraTip}</li><li>Keep only one face in the camera view.</li><li>Keep your face inside the guide.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera. We’ll guide you through the rest.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Try face check again</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
   const video = document.querySelector('#face-video');
   const canvas = document.querySelector('#face-canvas');
   const message = document.querySelector('#camera-message');
@@ -744,6 +744,9 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     message.textContent = text;
     message.dataset.state = state;
   };
+  const cameraErrorMessage = error => /face service did not respond|waking up; retry in a minute|running in render/i.test(error?.message || '')
+    ? 'The face check is not responding. Check the service connection and try again.'
+    : error?.message || 'The face check failed. Please try again.';
   const guide = document.querySelector('#face-guide');
   const trackingBox = document.querySelector('#face-tracking-box');
   const prompt = document.querySelector('#challenge-prompt');
@@ -752,10 +755,10 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   const actionButton = document.querySelector('#camera-action');
   const retryButton = document.querySelector('#camera-retry');
   const assessmentFrames = [];
-  const requiredStableFrames = enrollmentMode ? 3 : 5;
+  const requiredStableFrames = 2;
   const trackingPaddingFraction = 0.12;
-  const stableCenterTolerance = enrollmentMode ? 0.06 : 0.025;
-  const stableSizeTolerance = enrollmentMode ? 0.06 : 0.025;
+  const stableCenterTolerance = 0.05;
+  const stableSizeTolerance = 0.05;
   let readyCount = 0;
   let assessing = false;
   let previousFace = null;
@@ -865,6 +868,8 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     assessing = true;
     const assessmentStream = activeCameraStream;
     const assessmentStage = currentStage;
+    let requestTimedOut = false;
+    const requestTimer = setTimeout(() => { requestTimedOut = true; }, 12000);
     try {
       const blob = await captureBlob();
       const data = new FormData();
@@ -874,12 +879,17 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       const response = await fetch('/api/blockchain/face/assess', {
         method: 'POST',
         headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
-        body: data
+        body: data,
+        signal: AbortSignal.timeout(12000)
       });
       const result = await response.json();
       if (activeCameraStream !== assessmentStream || video.hidden ||
           currentStage === 'submitting' || currentStage !== assessmentStage) return;
-      if (!response.ok) throw new Error(result.message || 'Face assessment is temporarily unavailable.');
+      if (!response.ok) {
+        const error = new Error(result.message || result.error?.message || 'Face check is temporarily unavailable.');
+        error.status = response.status;
+        throw error;
+      }
       if (result.face) {
         const stable = result.ready && faceIsStable(result.face);
         if (!result.ready) previousFace = null;
@@ -902,21 +912,28 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
             : mode === 'verify' ? 'Start liveness challenge' : actionLabel;
         } else {
           setCameraMessage(result.message || 'Hold still while position stabilizes.', 'yellow');
-          actionButton.disabled = !enrollmentMode;
+          actionButton.disabled = true;
           if (mode === 'verify' && currentStage === 'position') actionButton.textContent = 'Stabilizing face position';
         }
       } else {
         assessmentFrames.length = 0;
-        actionButton.disabled = !enrollmentMode;
-        setCameraMessage(result.message || 'Keep only yourself in the camera view and hold still.', result.state === 'yellow' ? 'yellow' : 'red');
+        actionButton.disabled = true;
+        setCameraMessage(result.message || 'Center your whole face inside the guide and hold still.', result.state === 'yellow' ? 'yellow' : 'red');
       }
     } catch (error) {
       readyCount = 0;
       assessmentFrames.length = 0;
-      actionButton.disabled = !enrollmentMode;
+      actionButton.disabled = true;
       loseTracking();
-      showCameraError(error);
+      if (error.status >= 500 || error.name === 'TypeError' || error.name === 'TimeoutError' || error.name === 'AbortError') {
+        setCameraMessage(requestTimedOut || error.name === 'TimeoutError' || error.name === 'AbortError'
+          ? 'Face check is taking too long. Check your connection and try again.'
+          : 'Face check is temporarily unavailable. Keep the camera open; we’ll retry shortly.', 'yellow');
+      } else {
+        showCameraError(error);
+      }
     } finally {
+      clearTimeout(requestTimer);
       assessing = false;
     }
   }
@@ -972,9 +989,12 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       retryButton.hidden = false;
       actionButton.hidden = false;
       actionButton.disabled = true;
-      setCameraMessage(error.message, 'red');
+      setCameraMessage(cameraErrorMessage(error), 'red');
       readyCount = 0;
       assessmentFrames.length = 0;
+      if (activeCameraStream && !faceAssessmentTimer) {
+        faceAssessmentTimer = setInterval(() => assessCurrentFrame(), 1600);
+      }
     } finally {
       submitting = false;
     }
@@ -1002,7 +1022,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       prompt.textContent = `Step 1 of 2: ${result.action === 'turn_left' ? 'Turn your head toward your left shoulder.' : 'Turn your head toward your right shoulder.'}`;
       setCameraMessage('Keep your face inside the guide while turning.', 'yellow');
       actionButton.textContent = 'Capture head movement';
-      actionButton.disabled = false;
+      actionButton.disabled = true;
       faceChallengeTimer = setInterval(() => {
         const remaining = Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - Date.now()) / 1000));
         countdown.textContent = `Challenge expires in ${remaining} seconds.`;
@@ -1044,10 +1064,10 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       document.querySelector('#camera-placeholder').hidden = true;
       startButton.hidden = true;
       actionButton.hidden = false;
-      actionButton.disabled = false;
+      actionButton.disabled = true;
       actionButton.textContent = mode === 'verify' ? 'Stabilizing face position' : actionLabel;
       setCameraMessage('Center your face in the guide and hold still.', 'yellow');
-      faceAssessmentTimer = setInterval(() => assessCurrentFrame(), 450);
+      faceAssessmentTimer = setInterval(() => assessCurrentFrame(), 1600);
       await assessCurrentFrame();
     } catch (error) {
       stopCamera();

@@ -67,7 +67,7 @@ app.use((error, _request, response, _next) => {
   if (status >= 500) console.error(JSON.stringify({ event: 'REQUEST_FAILED', code, status }));
   const responseMessage = status >= 500
     ? code === 'FACE_SERVICE_UNAVAILABLE'
-      ? 'The face service did not respond. It may be waking up; retry in a minute. If this continues, check that the face service is running in Render.'
+      ? 'The face check is taking too long or is temporarily unavailable. Check your connection and try again.'
       : 'The server could not complete the request.'
     : error.code === 11000
       ? 'This record already exists.'

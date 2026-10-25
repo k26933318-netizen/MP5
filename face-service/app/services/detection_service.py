@@ -263,7 +263,7 @@ class FaceRecognitionRuntime:
         if not live:
             raise HTTPException(status_code=403, detail={
                 "code": "PRESENTATION_ATTACK_SUSPECTED",
-                "message": "The presentation-attack check did not pass. Please try again.",
+                    "message": "We could not confirm a live face. Center your whole face in the guide, use steady lighting, remove screen glare, and try again.",
             })
         vectors = [self.recognizer.embed(item["image"], item["landmarks"]) for item in usable]
         embedding = np.mean(vectors, axis=0)

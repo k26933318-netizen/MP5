@@ -63,7 +63,9 @@ function requireFaceImage(request) {
 function requireFaceImages(request, minimum = 5, maximum = 15) {
   const files = request.files;
   if (!Array.isArray(files) || files.length < minimum || files.length > maximum) {
-    const error = new Error(`Capture between ${minimum} and ${maximum} face frames before continuing.`);
+    const error = new Error(minimum === 1 && maximum === 1
+      ? 'Capture one clear face image before continuing.'
+      : 'The face check is incomplete. Please try again.');
     error.code = 'INVALID_FRAME_COUNT';
     error.statusCode = 400;
     throw error;
@@ -184,7 +186,7 @@ module.exports = {
       error.statusCode = 400;
       throw error;
     }
-    const images = requireFaceImages(request, 1, 1);
+      const images = requireFaceImages(request, 1, 1);
     const result = await faceClient.enrollFrames(images);
     requireValidFaceAnalysis(result, { requireBackground: false, requireStability: false });
 
@@ -217,7 +219,7 @@ module.exports = {
   enrollFace: asyncRoute(async (request, response) => {
     const voterId = request.user.voterId;
     try {
-      const images = requireFaceImages(request);
+    const images = requireFaceImages(request, 1, 1);
       const voter = await mongo.getVoterCredentials(voterId);
       if (!voter || voter.status !== 'APPROVED') {
         const error = new Error('An approved voter account is required to enroll a face.');

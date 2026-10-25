@@ -135,7 +135,7 @@ async function withRegistrationStubs(enrolledEmbeddings, options = {}) {
     return operation;
   };
   faceClient.enrollFrames = async images => {
-    assert.equal(images.length, 5);
+    assert.equal(images.length, 1);
     if (options.faceError) throw options.faceError;
     return ({
       embedding: options.embedding || candidate,
@@ -147,7 +147,7 @@ async function withRegistrationStubs(enrolledEmbeddings, options = {}) {
   const invoke = async index => {
     const request = {
       body: { registration: JSON.stringify({ voterId: index === 0 ? 'NEW-VOTER' : `NEW-VOTER-${index}`, name: 'New User', phone: '123', password: 'password', biometricConsent: true }) },
-      files: Array.from({ length: 5 }, () => ({ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }))
+      files: [{ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }]
     };
     const response = {
       statusCode: 200,
@@ -228,7 +228,7 @@ test('face re-enrollment rejects the enrolled voter face without replacing the t
   try {
     await controller.enrollFace({
       user: { voterId: 'EXISTING-VOTER' },
-      files: Array.from({ length: 5 }, () => ({ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }))
+      files: [{ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }]
     }, response, caught => { error = caught; });
     assert.equal(error.code, 'DUPLICATE_FACE');
     assert.equal(error.message, 'This face is already registered.');
@@ -303,11 +303,33 @@ test('registration frontend requires backend-confirmed enrollment and protects i
   assert.match(source, /result\.success !== true/);
   assert.match(source, /result\.faceEnrollment\?\.enrolled !== true/);
   assert.match(source, /activeCameraStream !== assessmentStream/);
-  assert.match(source, /if \(submitting \|\| assessing \|\| currentStage === 'submitting'\) return/);
+  assert.match(source, /if \(submitting \|\| currentStage === 'submitting'\) return/);
+  assert.match(source, /while \(assessing\) await new Promise\(resolve => setTimeout\(resolve, 50\)\)/);
   assert.match(source, /message\.textContent = error\.message/);
   assert.match(source, /mode === 'enroll' \|\| mode === 'registration'/);
-  assert.match(source, /requiredStableFrames = enrollmentMode \? 3 : 5/);
+  assert.match(source, /requiredStableFrames = 2/);
+  assert.match(source, /signal: AbortSignal\.timeout\(12000\)/);
+  assert.match(source, /Face check is taking too long/);
+  assert.match(source, /face service did not respond\|waking up; retry in a minute\|running in render/i);
+  assert.match(source, /actionButton\.disabled = true;\s*setCameraMessage\(result\.message \|\| 'Center your whole face inside the guide and hold still\.'/);
+  assert.match(source, /activeCameraStream && !faceAssessmentTimer/);
   assert.match(source, /workflow', enrollmentMode \? 'enroll' : 'verify'/);
+});
+
+test('missing enrollment image uses a clear message without exposing frame-count bounds', async () => {
+  const controller = require('../backend/blockchain/blockchainController');
+  let error;
+  await controller.registerVoter({
+    body: {
+      registration: JSON.stringify({
+        voterId: 'NEW-VOTER', name: 'New User', phone: '123', password: 'password', biometricConsent: true
+      })
+    },
+    files: []
+  }, {}, caught => { error = caught; });
+  assert.equal(error.code, 'INVALID_FRAME_COUNT');
+  assert.equal(error.message, 'Capture one clear face image before continuing.');
+  assert.doesNotMatch(error.message, /between \d+ and \d+|frames/i);
 });
 
 async function withFaceVerificationStubs({
