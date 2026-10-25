@@ -1,4 +1,6 @@
 const FACE_REQUEST_TIMEOUT_MS = Number(process.env.FACE_REQUEST_TIMEOUT_MS || 15000);
+// Render's free instance may need extra time to wake and load the face models.
+const FACE_ASSESSMENT_TIMEOUT_MS = Number(process.env.FACE_ASSESSMENT_TIMEOUT_MS || 60000);
 const FACE_SEQUENCE_TIMEOUT_MS = Number(process.env.FACE_SEQUENCE_TIMEOUT_MS || 45000);
 
 function faceError(code, message, statusCode = 503) {
@@ -49,7 +51,7 @@ function generateEmbedding(file) {
 }
 
 function assessPosition(file, stage = 'position') {
-  return upload('/assess', file, { stage });
+  return upload('/assess', file, { stage }, FACE_ASSESSMENT_TIMEOUT_MS);
 }
 
 function uploadFrames(path, files, fields = {}) {

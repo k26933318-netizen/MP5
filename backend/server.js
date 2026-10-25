@@ -66,7 +66,9 @@ app.use((error, _request, response, _next) => {
       error.code || (status === 503 ? 'SERVICE_UNAVAILABLE' : 'VALIDATION_ERROR');
   if (status >= 500) console.error(JSON.stringify({ event: 'REQUEST_FAILED', code, status }));
   const responseMessage = status >= 500
-    ? 'The server could not complete the request.'
+    ? code === 'FACE_SERVICE_UNAVAILABLE'
+      ? 'Face verification is starting or temporarily unavailable. Wait up to a minute and try again.'
+      : 'The server could not complete the request.'
     : error.code === 11000
       ? 'This record already exists.'
       : message;

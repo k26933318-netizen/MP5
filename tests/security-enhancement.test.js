@@ -70,7 +70,7 @@ test('ledger integrity detects tampering', () => {
 
 test('election state transitions reject invalid status changes', async () => {
   const { BlockchainService } = require('../backend/blockchain/blockchainService');
-  const service = new BlockchainService();
+  const service = new BlockchainService({ getElection: async () => null }, {});
   await assert.rejects(
     () => service.updateElectionState('ELEC-INVALID', 'ACTIVE'),
     /Election does not exist/i
