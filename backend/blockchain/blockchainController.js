@@ -186,9 +186,9 @@ module.exports = {
       error.statusCode = 400;
       throw error;
     }
-      const images = requireFaceImages(request, 1, 1);
+      const images = requireFaceImages(request, 3, 3);
     const result = await faceClient.enrollFrames(images);
-    requireValidFaceAnalysis(result, { requireBackground: false, requireStability: false });
+      requireValidFaceAnalysis(result, { requireBackground: false });
 
     const encrypted = encryptEmbedding(result.embedding);
     const voter = await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
@@ -219,7 +219,7 @@ module.exports = {
   enrollFace: asyncRoute(async (request, response) => {
     const voterId = request.user.voterId;
     try {
-    const images = requireFaceImages(request, 1, 1);
+      const images = requireFaceImages(request, 3, 3);
       const voter = await mongo.getVoterCredentials(voterId);
       if (!voter || voter.status !== 'APPROVED') {
         const error = new Error('An approved voter account is required to enroll a face.');

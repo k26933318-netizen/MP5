@@ -755,7 +755,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   const actionButton = document.querySelector('#camera-action');
   const retryButton = document.querySelector('#camera-retry');
   const assessmentFrames = [];
-  const requiredStableFrames = 2;
+  const requiredStableFrames = enrollmentMode ? 3 : 2;
   const trackingPaddingFraction = 0.12;
   const stableCenterTolerance = 0.05;
   const stableSizeTolerance = 0.05;
@@ -1069,7 +1069,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       actionButton.disabled = true;
       actionButton.textContent = mode === 'verify' ? 'Stabilizing face position' : actionLabel;
       setCameraMessage('Center your face in the guide and hold still.', 'yellow');
-      faceAssessmentTimer = setInterval(() => assessCurrentFrame(), 1600);
+      faceAssessmentTimer = setInterval(() => assessCurrentFrame(), enrollmentMode ? 900 : 1600);
       await assessCurrentFrame();
     } catch (error) {
       stopCamera();
@@ -1089,11 +1089,11 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       actionButton.disabled = true;
       setCameraMessage('Using the clear frame already checked. Hold still.', 'yellow');
       try {
-        const checkedFrame = assessmentFrames.at(-1);
-        if (!checkedFrame || readyCount < requiredStableFrames) {
+        const checkedFrames = assessmentFrames.slice(-requiredStableFrames);
+        if (checkedFrames.length !== requiredStableFrames || readyCount < requiredStableFrames) {
           throw new Error('Center your whole face in the guide and hold still until it turns green.');
         }
-        await submitFrames([checkedFrame]);
+        await submitFrames(checkedFrames);
       } catch (error) {
         actionButton.disabled = false;
         setCameraMessage(error.message || 'Could not capture your face. Please try again.', 'red');
