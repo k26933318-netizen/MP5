@@ -40,6 +40,16 @@ services:
         value: 3.11.11
       - key: FACE_SERVICE_API_KEY
         sync: false
+      - key: FACE_DETECTION_SIZE
+        value: "320"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
       - key: FACE_REQUIRE_ANTISPOOF
         value: "true"
       - key: FACE_ANTISPOOF_MODEL_A_PATH

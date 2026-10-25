@@ -256,15 +256,26 @@ class FaceRecognitionRuntime:
 
 def create_runtime() -> FaceRecognitionRuntime:
     from insightface.app import FaceAnalysis
+    import onnxruntime as ort
 
     from app.models.face_detector import InsightFaceDetector
     from app.models.face_recognizer import ArcFaceRecognizer
+
+    # Keep the existing model weights and embedding semantics while reducing
+    # the ONNX Runtime working set on small-memory hosts such as Render Free.
+    session_options = ort.SessionOptions()
+    session_options.intra_op_num_threads = 1
+    session_options.inter_op_num_threads = 1
+    session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    session_options.enable_cpu_mem_arena = False
+    session_options.enable_mem_pattern = False
 
     analysis = FaceAnalysis(
         name=settings.insightface_model_name,
         root=str(settings.insightface_model_root),
         allowed_modules=["detection", "recognition"],
         providers=["CPUExecutionProvider"],
+        sess_options=session_options,
     )
     analysis.prepare(
         ctx_id=-1,
