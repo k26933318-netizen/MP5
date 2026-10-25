@@ -736,7 +736,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   const cameraTip = enrollmentMode
     ? 'Use even lighting; your background does not need to be white.'
     : 'Use a plain white, evenly lit background.';
-  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>${cameraTip}</li><li>Keep only one face in the camera view.</li><li>Keep your face inside the guide.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera. We’ll guide you through the rest.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Try face check again</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
+  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>${cameraTip}</li><li>Keep only one face in the camera view.</li><li>Keep your whole face inside the guide and hold still when it turns green.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera. We’ll guide you through the rest.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Try face check again</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
   const video = document.querySelector('#face-video');
   const canvas = document.querySelector('#face-canvas');
   const message = document.querySelector('#camera-message');
@@ -957,7 +957,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     faceChallengeTimer = null;
     actionButton.disabled = true;
     while (assessing) await new Promise(resolve => setTimeout(resolve, 50));
-    setCameraMessage('The server is checking image quality, identity, and liveness.');
+    setCameraMessage('Checking image sharpness, face match, and liveness. Hold still.');
     const form = new FormData();
     frames.forEach((frame, index) => form.append('images', frame, `face-${index + 1}.jpg`));
     for (const [name, value] of Object.entries(fields)) form.append(name, value);
@@ -989,7 +989,9 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       retryButton.hidden = false;
       actionButton.hidden = false;
       actionButton.disabled = true;
-      setCameraMessage(cameraErrorMessage(error), 'red');
+      setCameraMessage(/sharper image|image is sharp|blurry/i.test(error?.message || '')
+        ? 'The image was blurred by movement. Hold still until the guide is green, then try again.'
+        : cameraErrorMessage(error), 'red');
       readyCount = 0;
       assessmentFrames.length = 0;
       if (activeCameraStream && !faceAssessmentTimer) {
@@ -1085,9 +1087,13 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     if (actionButton.disabled || (assessing && !enrollmentMode) || submitting) return;
     if (mode !== 'verify') {
       actionButton.disabled = true;
-      setCameraMessage('Capturing your face. Hold still for a moment.', 'yellow');
+      setCameraMessage('Using the clear frame already checked. Hold still.', 'yellow');
       try {
-        await submitFrames([await captureBlob()]);
+        const checkedFrame = assessmentFrames.at(-1);
+        if (!checkedFrame || readyCount < requiredStableFrames) {
+          throw new Error('Center your whole face in the guide and hold still until it turns green.');
+        }
+        await submitFrames([checkedFrame]);
       } catch (error) {
         actionButton.disabled = false;
         setCameraMessage(error.message || 'Could not capture your face. Please try again.', 'red');

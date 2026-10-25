@@ -272,7 +272,7 @@ def assess_face(
     gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
     blur = float(cv2.Laplacian(gray, cv2.CV_64F).var())
     brightness = float(gray.mean())
-    if blur < (15 if relaxed_position else 25):
+    if blur < 25:
         _reject("BLURRY", "Hold still so the image is sharp.")
     if brightness < 35 or brightness > 220:
         _reject("BAD_LIGHTING", "Improve the lighting on your face.")

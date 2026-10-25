@@ -263,7 +263,7 @@ class FaceRecognitionRuntime:
         if not live:
             raise HTTPException(status_code=403, detail={
                 "code": "PRESENTATION_ATTACK_SUSPECTED",
-                    "message": "We could not confirm a live face. Center your whole face in the guide, use steady lighting, remove screen glare, and try again.",
+                    "message": "We could not confirm a live face. Hold still to avoid blur, center your whole face in the guide, use steady lighting, and try again.",
             })
         vectors = [self.recognizer.embed(item["image"], item["landmarks"]) for item in usable]
         embedding = np.mean(vectors, axis=0)
@@ -333,7 +333,9 @@ class FaceRecognitionRuntime:
         self, image: np.ndarray, box: np.ndarray, points: np.ndarray, relaxed_position: bool = False
     ) -> None:
         from app.utils.image_utils import validate_face_quality
-        validate_face_quality(image, box, points, min_blur=15 if relaxed_position else 25)
+        # Position can be relaxed for enrollment, but blur degrades both matching
+        # and passive liveness and must use the same minimum in every workflow.
+        validate_face_quality(image, box, points, min_blur=25)
 
     def _position_in_guide(self, frames: list[dict], tolerance_scale: float = 1.5) -> bool:
         return all(

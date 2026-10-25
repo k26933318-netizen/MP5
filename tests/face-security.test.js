@@ -313,6 +313,8 @@ test('registration frontend requires backend-confirmed enrollment and protects i
   assert.match(source, /face service did not respond\|waking up; retry in a minute\|running in render/i);
   assert.match(source, /actionButton\.disabled = true;\s*setCameraMessage\(result\.message \|\| 'Center your whole face inside the guide and hold still\.'/);
   assert.match(source, /activeCameraStream && !faceAssessmentTimer/);
+  assert.match(source, /const checkedFrame = assessmentFrames\.at\(-1\)/);
+  assert.match(source, /readyCount < requiredStableFrames/);
   assert.match(source, /workflow', enrollmentMode \? 'enroll' : 'verify'/);
 });
 
