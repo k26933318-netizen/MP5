@@ -205,13 +205,14 @@ class FaceRecognitionRuntime:
     def analyze_frames(self, images: list[np.ndarray], mode: str, action: str | None = None) -> dict:
         stage_size = settings.challenge_frames_per_stage
         if mode == "enroll":
-            if len(images) < 3 or len(images) > 8:
+            if len(images) != 1 and not 3 <= len(images) <= 8:
                 raise HTTPException(status_code=400, detail={
                     "code": "INVALID_FRAME_COUNT",
-                    "message": "Capture at least three steady frames to enroll.",
+                    "message": "Submit one image or three to eight face frames to enroll.",
                 })
             analysis = [self._analyze_frame(image, True, require_background=False, relaxed_position=True) for image in images]
-            self._require_stable(analysis, min(0.25, settings.face_stability_tolerance * 1.5))
+            if len(analysis) > 1:
+                self._require_stable(analysis, min(0.25, settings.face_stability_tolerance * 1.5))
             usable = analysis
         elif mode == "verify":
             if action not in {"turn_left", "turn_right"} or len(images) != stage_size * 3:
@@ -276,7 +277,8 @@ class FaceRecognitionRuntime:
             "embedding": (embedding / norm).astype(float).tolist(),
             "dimension": 512,
             "model_version": self.model_version,
-            "checks": {"position": True, "quality": True, "stable": True,
+            "checks": {"position": True, "quality": True,
+                       "stable": mode == "verify" or len(analysis) > 1,
                        "head_movement": mode == "verify", "presentation_attack": True,
                        "antispoof_score": score,
                        **({"background": True} if mode == "verify" else {})},

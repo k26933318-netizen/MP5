@@ -96,12 +96,12 @@ function faceChallengeFramesPerStage() {
   return framesPerStage;
 }
 
-function requireValidFaceAnalysis(result, { requireBackground = true } = {}) {
+function requireValidFaceAnalysis(result, { requireBackground = true, requireStability = true } = {}) {
   if (!result || result.dimension !== 512 || !Array.isArray(result.embedding) ||
       typeof result.model_version !== 'string' || !result.model_version ||
       !result.checks || result.checks.position !== true ||
       (requireBackground && result.checks.background !== true) ||
-      result.checks.quality !== true || result.checks.stable !== true ||
+      result.checks.quality !== true || (requireStability && result.checks.stable !== true) ||
       result.checks.presentation_attack !== true) {
     const error = new Error('Face analysis did not confirm every required server-side check.');
     error.code = 'FACE_VALIDATION_FAILED';
@@ -184,9 +184,9 @@ module.exports = {
       error.statusCode = 400;
       throw error;
     }
-    const images = requireFaceImages(request, 3, 8);
+    const images = requireFaceImages(request, 1, 1);
     const result = await faceClient.enrollFrames(images);
-    requireValidFaceAnalysis(result, { requireBackground: false });
+    requireValidFaceAnalysis(result, { requireBackground: false, requireStability: false });
 
     const encrypted = encryptEmbedding(result.embedding);
     const voter = await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {

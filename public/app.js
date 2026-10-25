@@ -1067,7 +1067,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       actionButton.disabled = true;
       setCameraMessage('Capturing your face. Hold still for a moment.', 'yellow');
       try {
-        await submitFrames(await captureBurst(3));
+        await submitFrames([await captureBlob()]);
       } catch (error) {
         actionButton.disabled = false;
         setCameraMessage(error.message || 'Could not capture your face. Please try again.', 'red');
