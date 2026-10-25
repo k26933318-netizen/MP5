@@ -77,7 +77,6 @@ router.get('/voters/:voterId', auth.requireAuth, controller.getVoter);
 router.post('/voters/:voterId/face', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.enrollFace);
 router.get('/face/status', auth.requireRole('voter'), controller.faceStatus);
 router.post('/face/assess', faceAssessmentLimiter, faceUpload.single('image'), controller.assessFace);
-router.post('/face/enrollment-challenge', faceLimiter, controller.createEnrollmentFaceChallenge);
 router.post('/face/enroll', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.enrollFace);
 router.post('/face/challenge', auth.requireRole('voter'), faceLimiter, controller.createFaceChallenge);
 router.post('/face/verify', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.verifyFace);

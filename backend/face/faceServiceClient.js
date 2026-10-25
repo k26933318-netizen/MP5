@@ -103,12 +103,8 @@ function enrollFrames(files) {
   return uploadFrames('/frames/enroll', files);
 }
 
-function enrollChallengeFrames(files, challengeAction) {
-  return uploadFrames('/frames/enroll-challenge', files, { challenge_action: challengeAction });
-}
-
 function verifyFrames(files, challengeAction) {
   return uploadFrames('/frames/verify', files, { challenge_action: challengeAction });
 }
 
-module.exports = { health, generateEmbedding, assessPosition, enrollFrames, enrollChallengeFrames, verifyFrames, faceError };
+module.exports = { health, generateEmbedding, assessPosition, enrollFrames, verifyFrames, faceError };

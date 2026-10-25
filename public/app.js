@@ -733,7 +733,7 @@ function legacyCameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel
 
 function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSuccess, onBack, mode }) {
   const enrollmentMode = mode === 'enroll' || mode === 'registration';
-  const challengeMode = mode === 'verify' || enrollmentMode;
+  const challengeMode = mode === 'verify';
   const cameraTip = enrollmentMode
     ? 'Use even lighting; your background does not need to be white.'
     : 'Use a plain white, evenly lit background.';
@@ -756,7 +756,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   const actionButton = document.querySelector('#camera-action');
   const retryButton = document.querySelector('#camera-retry');
   const assessmentFrames = [];
-  const requiredStableFrames = challengeMode ? 3 : 2;
+  const requiredStableFrames = enrollmentMode || challengeMode ? 3 : 2;
   const trackingPaddingFraction = 0.12;
   const stableCenterTolerance = 0.05;
   const stableSizeTolerance = 0.05;
@@ -949,7 +949,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     return captured;
   }
 
-  async function submitFrames(frames, challengeId = '', challengeAction = '') {
+  async function submitFrames(frames, challengeId = '') {
     if (submitting || currentStage === 'submitting') return;
     submitting = true;
     currentStage = 'submitting';
@@ -964,7 +964,6 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     frames.forEach((frame, index) => form.append('images', frame, `face-${index + 1}.jpg`));
     for (const [name, value] of Object.entries(fields)) form.append(name, value);
     if (challengeId) form.append('challengeId', challengeId);
-    if (challengeAction) form.append('challengeAction', challengeAction);
     try {
       const response = await fetch(`/api/blockchain${endpoint}`, {
         method: 'POST',
@@ -1007,23 +1006,15 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
 
   async function startChallenge() {
     actionButton.disabled = true;
-    setCameraMessage(enrollmentMode
-      ? 'Preparing your randomized face movement check...'
-      : 'Preparing a server-issued liveness challenge...');
+    setCameraMessage('Preparing a server-issued liveness challenge...');
     try {
-      const challengePath = enrollmentMode
-        ? '/api/blockchain/face/enrollment-challenge'
-        : '/api/blockchain/face/challenge';
-      const challengeBody = enrollmentMode
-        ? { voterId: fields.voterId || '' }
-        : { electionId: fields.electionId };
-      const response = await fetch(challengePath, {
+      const response = await fetch('/api/blockchain/face/challenge', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {})
         },
-        body: JSON.stringify(challengeBody)
+        body: JSON.stringify({ electionId: fields.electionId })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Could not start the liveness check.');
@@ -1136,11 +1127,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       try {
         const returnFrames = await captureBurst(challenge.framesPerStage);
         const challengeId = challenge.challengeId;
-        await submitFrames(
-          [...baselineFrames, ...turnFrames, ...returnFrames],
-          challengeId,
-          enrollmentMode ? challenge.action : ''
-        );
+        await submitFrames([...baselineFrames, ...turnFrames, ...returnFrames], challengeId);
       } catch (error) {
         expireChallenge();
         showCameraError(error);

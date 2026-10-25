@@ -104,7 +104,7 @@ async function withRegistrationStubs(enrolledEmbeddings, options = {}) {
     listFaceEnrollments: mongo.listFaceEnrollments,
     registerVoter: mongo.registerVoter,
     withFaceEnrollmentLock: mongo.withFaceEnrollmentLock,
-    enrollChallengeFrames: faceClient.enrollChallengeFrames
+    enrollFrames: faceClient.enrollFrames
   };
   const candidate = Array(512).fill(0);
   candidate[0] = 1;
@@ -134,9 +134,8 @@ async function withRegistrationStubs(enrolledEmbeddings, options = {}) {
     lockQueue = operation.then(() => undefined, () => undefined);
     return operation;
   };
-  faceClient.enrollChallengeFrames = async (images, action) => {
-    assert.equal(images.length, 9);
-    assert.ok(['turn_left', 'turn_right'].includes(action));
+  faceClient.enrollFrames = async images => {
+    assert.equal(images.length, 3);
     if (options.faceError) throw options.faceError;
     return ({
       embedding: options.embedding || candidate,
@@ -147,15 +146,11 @@ async function withRegistrationStubs(enrolledEmbeddings, options = {}) {
   };
   const invoke = async index => {
     const voterId = index === 0 ? 'NEW-VOTER' : `NEW-VOTER-${index}`;
-    const challengeResponse = { json(payload) { this.payload = payload; return this; } };
-    await controller.createEnrollmentFaceChallenge({ body: { voterId } }, challengeResponse, error => { throw error; });
     const request = {
       body: {
-        registration: JSON.stringify({ voterId, name: 'New User', phone: '123', password: 'password', biometricConsent: true }),
-        challengeId: challengeResponse.payload.challengeId,
-        challengeAction: challengeResponse.payload.action
+        registration: JSON.stringify({ voterId, name: 'New User', phone: '123', password: 'password', biometricConsent: true })
       },
-      files: Array.from({ length: 9 }, () => ({ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }))
+      files: Array.from({ length: 3 }, () => ({ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }))
     };
     const response = {
       statusCode: 200,
@@ -175,7 +170,7 @@ async function withRegistrationStubs(enrolledEmbeddings, options = {}) {
     mongo.listFaceEnrollments = originalMethods.listFaceEnrollments;
     mongo.registerVoter = originalMethods.registerVoter;
     mongo.withFaceEnrollmentLock = originalMethods.withFaceEnrollmentLock;
-    faceClient.enrollChallengeFrames = originalMethods.enrollChallengeFrames;
+    faceClient.enrollFrames = originalMethods.enrollFrames;
     if (previousKey === undefined) delete process.env.FACE_ENCRYPTION_KEY;
     else process.env.FACE_ENCRYPTION_KEY = previousKey;
   }
@@ -210,7 +205,7 @@ test('face re-enrollment rejects the enrolled voter face without replacing the t
     getVoterCredentials: mongo.getVoterCredentials,
     saveFaceEnrollment: mongo.saveFaceEnrollment,
     logAudit: mongo.logAudit,
-    enrollChallengeFrames: faceClient.enrollChallengeFrames
+    enrollFrames: faceClient.enrollFrames
   };
   const embedding = Array(512).fill(0);
   embedding[0] = 1;
@@ -225,7 +220,7 @@ test('face re-enrollment rejects the enrolled voter face without replacing the t
   mongo.getVoterCredentials = async () => ({ voterId: 'EXISTING-VOTER', status: 'APPROVED' });
   mongo.saveFaceEnrollment = async () => { saved = true; };
   mongo.logAudit = async () => {};
-  faceClient.enrollChallengeFrames = async () => ({
+  faceClient.enrollFrames = async () => ({
     embedding,
     dimension: 512,
     model_version: 'arcface-test',
@@ -234,12 +229,9 @@ test('face re-enrollment rejects the enrolled voter face without replacing the t
   const response = { json(payload) { this.payload = payload; return this; } };
   let error;
   try {
-    const challengeResponse = { json(payload) { this.payload = payload; return this; } };
-    await controller.createEnrollmentFaceChallenge({ user: { voterId: 'EXISTING-VOTER' }, body: {} }, challengeResponse, caught => { throw caught; });
     await controller.enrollFace({
       user: { voterId: 'EXISTING-VOTER' },
-      body: { challengeId: challengeResponse.payload.challengeId, challengeAction: challengeResponse.payload.action },
-      files: Array.from({ length: 9 }, () => ({ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }))
+      files: Array.from({ length: 3 }, () => ({ buffer: Buffer.from('image'), mimetype: 'image/jpeg' }))
     }, response, caught => { error = caught; });
     assert.equal(error.code, 'DUPLICATE_FACE');
     assert.equal(error.message, 'This face is already registered.');
@@ -251,7 +243,7 @@ test('face re-enrollment rejects the enrolled voter face without replacing the t
     mongo.getVoterCredentials = originalMethods.getVoterCredentials;
     mongo.saveFaceEnrollment = originalMethods.saveFaceEnrollment;
     mongo.logAudit = originalMethods.logAudit;
-    faceClient.enrollChallengeFrames = originalMethods.enrollChallengeFrames;
+    faceClient.enrollFrames = originalMethods.enrollFrames;
     if (previousKey === undefined) delete process.env.FACE_ENCRYPTION_KEY;
     else process.env.FACE_ENCRYPTION_KEY = previousKey;
   }
@@ -273,22 +265,22 @@ test('voter registration stores a face enrollment when no duplicate matches', as
   assert.equal(registrationArgs[2], 'arcface-test');
 });
 
-test('enrollment accepts a failed passive score only after the server movement challenge passes', async () => {
+test('enrollment does not require a separate liveness challenge or passive anti-spoof result', async () => {
   const unrelated = Array(512).fill(0);
   unrelated[1] = 1;
   const { response, error } = await withRegistrationStubs([unrelated], {
-    checks: { position: true, quality: true, stable: true, head_movement: true, presentation_attack: false }
+    checks: { position: true, quality: true, stable: true, head_movement: false, presentation_attack: false }
   });
   assert.equal(error, undefined);
   assert.equal(response.statusCode, 201);
   assert.equal(response.payload.faceEnrollment.enrolled, true);
 });
 
-test('enrollment still rejects a failed passive score when the movement challenge did not pass', async () => {
+test('enrollment still rejects a face that fails position, quality, or stability checks', async () => {
   const unrelated = Array(512).fill(0);
   unrelated[1] = 1;
   const { error, registerCalls } = await withRegistrationStubs([unrelated], {
-    checks: { position: true, quality: true, stable: true, head_movement: false, presentation_attack: false }
+    checks: { position: true, quality: false, stable: true, head_movement: false, presentation_attack: false }
   });
   assert.equal(error.code, 'FACE_VALIDATION_FAILED');
   assert.equal(registerCalls, 0);
@@ -339,9 +331,8 @@ test('registration frontend requires backend-confirmed enrollment and protects i
   assert.match(source, /while \(assessing\) await new Promise\(resolve => setTimeout\(resolve, 50\)\)/);
   assert.match(source, /message\.textContent = error\.message/);
   assert.match(source, /mode === 'enroll' \|\| mode === 'registration'/);
-  assert.match(source, /requiredStableFrames = challengeMode \? 3 : 2/);
-  assert.match(source, /\/api\/blockchain\/face\/enrollment-challenge/);
-  assert.match(source, /enrollmentMode \? challenge\.action : ''/);
+  assert.match(source, /const challengeMode = mode === 'verify'/);
+  assert.match(source, /requiredStableFrames = enrollmentMode \|\| challengeMode \? 3 : 2/);
   assert.match(source, /signal: AbortSignal\.timeout\(12000\)/);
   assert.match(source, /Face check is taking too long/);
   assert.match(source, /face service did not respond\|waking up; retry in a minute\|running in render/i);
@@ -354,13 +345,9 @@ test('registration frontend requires backend-confirmed enrollment and protects i
 
 test('missing enrollment image uses a clear message without exposing frame-count bounds', async () => {
   const controller = require('../backend/blockchain/blockchainController');
-  const challengeResponse = { json(payload) { this.payload = payload; return this; } };
-  await controller.createEnrollmentFaceChallenge({ body: { voterId: 'NEW-VOTER' } }, challengeResponse, caught => { throw caught; });
   let error;
   await controller.registerVoter({
     body: {
-      challengeId: challengeResponse.payload.challengeId,
-      challengeAction: challengeResponse.payload.action,
       registration: JSON.stringify({
         voterId: 'NEW-VOTER', name: 'New User', phone: '123', password: 'password', biometricConsent: true
       })

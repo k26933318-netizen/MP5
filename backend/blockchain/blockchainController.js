@@ -7,7 +7,6 @@ const faceClient = require('../face/faceServiceClient');
 const { cosineSimilarity, faceSimilarityThreshold, findMatchingEmbedding } = require('../face/similarity');
 const service = new BlockchainService();
 let voterRegistrationQueue = Promise.resolve();
-const enrollmentLivenessChallenges = new Map();
 
 function asyncRoute(handler) { return (request, response, next) => Promise.resolve(handler(request, response)).catch(next); }
 function body(request) { return request.body || {}; }
@@ -99,67 +98,18 @@ function faceChallengeFramesPerStage() {
   return framesPerStage;
 }
 
-function issueEnrollmentLivenessChallenge(request, response) {
-  const authenticatedVoterId = request.user?.voterId;
-  const voterId = authenticatedVoterId || String(body(request).voterId || '').trim();
-  validate({ voterId }, ['voterId']);
-  const framesPerStage = faceChallengeFramesPerStage();
-  const ttlMs = Number(process.env.FACE_ENROLLMENT_CHALLENGE_TTL_SECONDS || 90) * 1000;
-  if (!Number.isInteger(ttlMs) || ttlMs < 15_000 || ttlMs > 5 * 60_000) {
-    const error = new Error('Face challenge configuration is invalid.');
-    error.code = 'FACE_CONFIGURATION_INVALID';
-    error.statusCode = 500;
-    throw error;
-  }
-  const now = Date.now();
-  for (const [id, challenge] of enrollmentLivenessChallenges) {
-    if (challenge.expiresAt <= now) enrollmentLivenessChallenges.delete(id);
-  }
-  while (enrollmentLivenessChallenges.size >= 1000) {
-    enrollmentLivenessChallenges.delete(enrollmentLivenessChallenges.keys().next().value);
-  }
-  const action = crypto.randomInt(2) ? 'turn_left' : 'turn_right';
-  const challengeId = crypto.randomBytes(32).toString('hex');
-  const expiresAt = now + ttlMs;
-  enrollmentLivenessChallenges.set(challengeId, { action, voterId, expiresAt });
-  return response.json({
-    success: true,
-    challengeId,
-    action,
-    expiresAt: new Date(expiresAt).toISOString(),
-    framesPerStage,
-    stages: ['center', action, 'center']
-  });
-}
-
-function consumeEnrollmentLivenessChallenge(request, voterId) {
-  const challengeId = request.body?.challengeId;
-  const requestedAction = request.body?.challengeAction;
-  const challenge = typeof challengeId === 'string' ? enrollmentLivenessChallenges.get(challengeId) : null;
-  if (challenge) enrollmentLivenessChallenges.delete(challengeId);
-  if (!challenge || challenge.expiresAt <= Date.now() || challenge.voterId !== voterId ||
-      challenge.action !== requestedAction) {
-    const error = new Error('The liveness check expired or could not be verified. Start a new face check.');
-    error.code = 'LIVENESS_CHALLENGE_INVALID';
-    error.statusCode = 403;
-    throw error;
-  }
-  return challenge.action;
-}
-
 function requireValidFaceAnalysis(result, {
   requireBackground = true,
   requireStability = true,
-  allowActiveLivenessFallback = false
+  requireLiveness = true
 } = {}) {
-  const livenessPassed = result?.checks?.presentation_attack === true ||
-    (allowActiveLivenessFallback && result?.checks?.head_movement === true);
+  const livenessPassed = result?.checks?.presentation_attack === true;
   if (!result || result.dimension !== 512 || !Array.isArray(result.embedding) ||
       typeof result.model_version !== 'string' || !result.model_version ||
       !result.checks || result.checks.position !== true ||
       (requireBackground && result.checks.background !== true) ||
       result.checks.quality !== true || (requireStability && result.checks.stable !== true) ||
-      !livenessPassed) {
+      (requireLiveness && !livenessPassed)) {
     const error = new Error('Face analysis did not confirm every required server-side check.');
     error.code = 'FACE_VALIDATION_FAILED';
     error.statusCode = 403;
@@ -241,11 +191,9 @@ module.exports = {
       error.statusCode = 400;
       throw error;
     }
-    const action = consumeEnrollmentLivenessChallenge(request, input.voterId);
-    const framesPerStage = faceChallengeFramesPerStage();
-    const images = requireFaceImages(request, framesPerStage * 3, framesPerStage * 3);
-    const result = await faceClient.enrollChallengeFrames(images, action);
-    requireValidFaceAnalysis(result, { requireBackground: false, allowActiveLivenessFallback: true });
+    const images = requireFaceImages(request, 3, 3);
+    const result = await faceClient.enrollFrames(images);
+    requireValidFaceAnalysis(result, { requireBackground: false, requireLiveness: false });
 
     const encrypted = encryptEmbedding(result.embedding);
     const voter = await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
@@ -273,14 +221,10 @@ module.exports = {
     }
     return response.json({ success: true, faceEnrollment: voter.faceEnrollment });
   }),
-  createEnrollmentFaceChallenge: asyncRoute(async (request, response) =>
-    issueEnrollmentLivenessChallenge(request, response)),
   enrollFace: asyncRoute(async (request, response) => {
     const voterId = request.user.voterId;
     try {
-      const action = consumeEnrollmentLivenessChallenge(request, voterId);
-      const framesPerStage = faceChallengeFramesPerStage();
-      const images = requireFaceImages(request, framesPerStage * 3, framesPerStage * 3);
+      const images = requireFaceImages(request, 3, 3);
       const voter = await mongo.getVoterCredentials(voterId);
       if (!voter || voter.status !== 'APPROVED') {
         const error = new Error('An approved voter account is required to enroll a face.');
@@ -288,8 +232,8 @@ module.exports = {
         error.statusCode = 403;
         throw error;
       }
-      const result = await faceClient.enrollChallengeFrames(images, action);
-      requireValidFaceAnalysis(result, { requireBackground: false, allowActiveLivenessFallback: true });
+      const result = await faceClient.enrollFrames(images);
+      requireValidFaceAnalysis(result, { requireBackground: false, requireLiveness: false });
       const encrypted = encryptEmbedding(result.embedding);
       await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
         await ensureFaceIsNotRegistered(result.embedding, result.model_version);

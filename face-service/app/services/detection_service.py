@@ -214,7 +214,7 @@ class FaceRecognitionRuntime:
             if len(analysis) > 1:
                 self._require_stable(analysis, min(0.25, settings.face_stability_tolerance * 1.5))
             usable = analysis
-        elif mode in {"verify", "enroll-challenge"}:
+        elif mode == "verify":
             if action not in {"turn_left", "turn_right"} or len(images) != stage_size * 3:
                 raise HTTPException(status_code=400, detail={
                     "code": "INVALID_CHALLENGE_FRAMES",
@@ -226,8 +226,7 @@ class FaceRecognitionRuntime:
                 analysis.append(self._analyze_frame(
                     image,
                     stage != 1,
-                    require_background=mode == "verify",
-                    relaxed_position=mode == "enroll-challenge",
+                    require_background=True,
                 ))
             baseline = analysis[:stage_size]
             turn = analysis[stage_size:stage_size * 2]
@@ -264,18 +263,15 @@ class FaceRecognitionRuntime:
         else:
             raise ValueError("Unsupported face analysis mode.")
 
-        live, score = anti_spoof.verify([(item["image"], item["box"]) for item in analysis])
-        if not live and mode != "enroll-challenge":
+        if mode == "verify":
+            live, score = anti_spoof.verify([(item["image"], item["box"]) for item in analysis])
+        else:
+            live, score = False, None
+        if not live and mode == "verify":
             raise HTTPException(status_code=403, detail={
                 "code": "PRESENTATION_ATTACK_SUSPECTED",
                 "message": "We could not confirm a live face. Hold still to avoid blur, center your whole face in the guide, use steady lighting, and try again.",
             })
-        if not live:
-            logger.warning(
-                "Enrollment accepted after randomized head-turn challenge; passive anti-spoof score %.3f was below threshold %.3f",
-                score,
-                settings.antispoof_threshold,
-            )
         vectors = [self.recognizer.embed(item["image"], item["landmarks"]) for item in usable]
         embedding = np.mean(vectors, axis=0)
         norm = float(np.linalg.norm(embedding))
@@ -289,8 +285,8 @@ class FaceRecognitionRuntime:
             "dimension": 512,
             "model_version": self.model_version,
             "checks": {"position": True, "quality": True,
-                       "stable": mode in {"verify", "enroll-challenge"} or len(analysis) > 1,
-                       "head_movement": mode in {"verify", "enroll-challenge"}, "presentation_attack": live,
+                       "stable": mode == "verify" or len(analysis) > 1,
+                       "head_movement": mode == "verify", "presentation_attack": live,
                        "antispoof_score": score,
                        **({"background": True} if mode == "verify" else {})},
         }
