@@ -188,7 +188,7 @@ function voterRegistration() {
       fields: { registration: JSON.stringify(registration) },
       actionLabel: 'Check face and register',
       mode: 'registration',
-      onSuccess: () => view(`<div class="success-mark">✓</div><div class="kicker">Registration submitted</div><h2>Awaiting admin approval</h2><p class="intro">Your voter account and encrypted face template are saved in MongoDB. An administrator must approve it before login is enabled.</p><button class="button full" onclick="loginPage()">Return to login</button>`),
+      onSuccess: () => view(`<div class="success-mark">✓</div><div class="kicker">Registration successful</div><h2>Your voter account is registered</h2><p class="intro">Your account and encrypted face template have been saved. An administrator must approve the account before you can log in and vote.</p><button class="button full" onclick="loginPage()">Return to login</button>`),
       onBack: voterRegistration
     });
   } catch (error) { view(`<div class="kicker">Registration failed</div><h2>Could not create account</h2><div class="notice error">${error.message}</div><button class="button" onclick="voterRegistration()">Try again</button>`); } };
@@ -902,18 +902,18 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
             : mode === 'verify' ? 'Start liveness challenge' : actionLabel;
         } else {
           setCameraMessage(result.message || 'Hold still while position stabilizes.', 'yellow');
-          actionButton.disabled = true;
+          actionButton.disabled = !enrollmentMode;
           if (mode === 'verify' && currentStage === 'position') actionButton.textContent = 'Stabilizing face position';
         }
       } else {
         assessmentFrames.length = 0;
-        actionButton.disabled = true;
+        actionButton.disabled = !enrollmentMode;
         setCameraMessage(result.message || 'Keep only yourself in the camera view and hold still.', result.state === 'yellow' ? 'yellow' : 'red');
       }
     } catch (error) {
       readyCount = 0;
       assessmentFrames.length = 0;
-      actionButton.disabled = true;
+      actionButton.disabled = !enrollmentMode;
       loseTracking();
       showCameraError(error);
     } finally {
@@ -931,12 +931,15 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   }
 
   async function submitFrames(frames, challengeId = '') {
-    if (submitting || assessing || currentStage === 'submitting') return;
+    if (submitting || currentStage === 'submitting') return;
     submitting = true;
     currentStage = 'submitting';
+    clearInterval(faceAssessmentTimer);
+    faceAssessmentTimer = null;
     clearInterval(faceChallengeTimer);
     faceChallengeTimer = null;
     actionButton.disabled = true;
+    while (assessing) await new Promise(resolve => setTimeout(resolve, 50));
     setCameraMessage('The server is checking image quality, identity, and liveness.');
     const form = new FormData();
     frames.forEach((frame, index) => form.append('images', frame, `face-${index + 1}.jpg`));
@@ -1041,6 +1044,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       document.querySelector('#camera-placeholder').hidden = true;
       startButton.hidden = true;
       actionButton.hidden = false;
+      actionButton.disabled = false;
       actionButton.textContent = mode === 'verify' ? 'Stabilizing face position' : actionLabel;
       setCameraMessage('Center your face in the guide and hold still.', 'yellow');
       faceAssessmentTimer = setInterval(() => assessCurrentFrame(), 450);
@@ -1058,15 +1062,16 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   };
 
   actionButton.onclick = async () => {
-    if (actionButton.disabled || assessing || submitting) return;
+    if (actionButton.disabled || (assessing && !enrollmentMode) || submitting) return;
     if (mode !== 'verify') {
-      const frames = assessmentFrames.slice(-requiredStableFrames);
-      if (frames.length !== requiredStableFrames || readyCount < requiredStableFrames) {
-        actionButton.disabled = true;
-        setCameraMessage('Wait until the face guide is green and stable.', 'yellow');
-        return;
+      actionButton.disabled = true;
+      setCameraMessage('Capturing your face. Hold still for a moment.', 'yellow');
+      try {
+        await submitFrames(await captureBurst(3));
+      } catch (error) {
+        actionButton.disabled = false;
+        setCameraMessage(error.message || 'Could not capture your face. Please try again.', 'red');
       }
-      await submitFrames(frames);
       return;
     }
     if (currentStage === 'position') {
