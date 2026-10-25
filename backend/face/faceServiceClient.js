@@ -50,8 +50,8 @@ function generateEmbedding(file) {
   return upload('/embedding', file);
 }
 
-function assessPosition(file, stage = 'position') {
-  return upload('/assess', file, { stage }, FACE_ASSESSMENT_TIMEOUT_MS);
+function assessPosition(file, stage = 'position', workflow = 'verify') {
+  return upload('/assess', file, { stage, workflow }, FACE_ASSESSMENT_TIMEOUT_MS);
 }
 
 function uploadFrames(path, files, fields = {}) {

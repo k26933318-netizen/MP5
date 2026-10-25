@@ -40,7 +40,7 @@ class RecognizerStub:
         return np.asarray([1.0] + [0.0] * 511, dtype=np.float32)
 
 
-def metrics(image, _box, _landmarks, require_frontal=True):
+def metrics(image, _box, _landmarks, require_frontal=True, require_background=True, relaxed_position=False):
     index = int(image[0, 0, 0])
     yaw = {3: 0.15, 4: 0.2, 5: 0.25}.get(index, 0.0)
     return {
@@ -171,16 +171,14 @@ class FaceWorkflowTests(unittest.TestCase):
             assess_face(image, bbox, landmarks)
         self.assertEqual(raised.exception.detail["code"], "FACE_OFF_CENTER")
 
-    def test_assessment_rejects_a_background_below_the_configured_near_white_fraction(self):
+    def test_enrollment_assessment_does_not_require_a_white_background(self):
         rng = np.random.default_rng(7)
         image = np.full((480, 640, 3), 120, dtype=np.uint8)
         image[100:350, 220:420] = rng.integers(30, 220, size=(250, 200, 3), dtype=np.uint8)
         bbox = np.asarray([220, 100, 420, 350], dtype=np.float32)
         landmarks = np.asarray([[280, 190], [360, 190], [320, 230], [290, 275], [350, 275]])
-        with self.assertRaises(HTTPException) as raised:
-            assess_face(image, bbox, landmarks)
-        self.assertEqual(raised.exception.detail["code"], "IMAGE_CONDITIONS_UNSUITABLE")
-        self.assertNotIn("white", raised.exception.detail["message"].lower())
+        result = assess_face(image, bbox, landmarks, require_background=False, relaxed_position=True)
+        self.assertIsNone(result["background"])
 
     def test_mostly_white_webcam_frame_with_centered_face_passes_background_check(self):
         image = webcam_frame()
@@ -251,45 +249,37 @@ class FaceWorkflowTests(unittest.TestCase):
         self.assertTrue(result["checks"]["presentation_attack"])
         self.assertEqual(len(result["embedding"]), 512)
 
-    def test_registration_stops_when_background_validation_genuinely_fails(self):
+    def test_registration_does_not_run_background_segmentation(self):
         subject = runtime()
-        failure = HTTPException(status_code=422, detail={
-            "code": "IMAGE_CONDITIONS_UNSUITABLE",
-            "message": "Adjust your surroundings and try again.",
-        })
-        with patch("app.services.detection_service.FaceRecognitionRuntime._validate_face"), \
-                patch("app.services.detection_service.assess_face", side_effect=failure), \
-                patch("app.services.detection_service.anti_spoof.verify") as pad:
-            with self.assertRaises(HTTPException) as raised:
-                subject.analyze_frames([frame(index) for index in range(5)], "enroll")
-        self.assertEqual(raised.exception.detail["code"], "IMAGE_CONDITIONS_UNSUITABLE")
-        pad.assert_not_called()
+        images = [webcam_frame(background=(130, 130, 130)) for _ in range(3)]
+        with patch("app.services.face_quality.background_metrics", side_effect=AssertionError("background check ran")), \
+                patch("app.services.detection_service.anti_spoof.verify", return_value=(True, 0.95)):
+            result = subject.analyze_frames(images, "enroll")
+        self.assertEqual(result["dimension"], 512)
+        self.assertNotIn("background", result["checks"])
 
     def test_registration_succeeds_when_segmented_background_passes(self):
         subject = runtime()
-        images = [webcam_frame() for _ in range(5)]
+        images = [webcam_frame() for _ in range(3)]
         with patch("app.services.detection_service.anti_spoof.verify", return_value=(True, 0.95)) as pad:
             result = subject.analyze_frames(images, "enroll")
-        self.assertTrue(result["checks"]["background"])
+        self.assertNotIn("background", result["checks"])
         self.assertTrue(result["checks"]["quality"])
         pad.assert_called_once()
 
-    def test_registration_rejects_a_genuinely_nonwhite_background(self):
+    def test_registration_accepts_a_plain_gray_background(self):
         subject = runtime()
-        images = [webcam_frame(background=(130, 130, 130)) for _ in range(5)]
-        with patch("app.services.detection_service.anti_spoof.verify") as pad:
-            with self.assertRaises(HTTPException) as raised:
-                subject.analyze_frames(images, "enroll")
-        self.assertEqual(raised.exception.detail["code"], "IMAGE_CONDITIONS_UNSUITABLE")
-        self.assertEqual(raised.exception.detail["message"], "Adjust your surroundings and try again.")
-        pad.assert_not_called()
+        images = [webcam_frame(background=(130, 130, 130)) for _ in range(3)]
+        with patch("app.services.detection_service.anti_spoof.verify", return_value=(True, 0.95)):
+            result = subject.analyze_frames(images, "enroll")
+        self.assertEqual(result["dimension"], 512)
 
     def test_unstable_enrollment_frames_are_rejected(self):
         subject = runtime()
         frames = [frame(index) for index in range(5)]
 
-        def moving_metrics(image, _box, _landmarks, require_frontal=True):
-            result = metrics(image, _box, _landmarks, require_frontal)
+        def moving_metrics(image, _box, _landmarks, require_frontal=True, require_background=True, relaxed_position=False):
+            result = metrics(image, _box, _landmarks, require_frontal, require_background, relaxed_position)
             result["center_x"] = 0.5 + int(image[0, 0, 0]) * 0.03
             return result
 
@@ -315,8 +305,8 @@ class FaceWorkflowTests(unittest.TestCase):
         subject = runtime()
         frames = [frame(index) for index in range(9)]
 
-        def static_turn_metrics(image, _box, _landmarks, require_frontal=True):
-            result = metrics(image, _box, _landmarks, require_frontal)
+        def static_turn_metrics(image, _box, _landmarks, require_frontal=True, require_background=True, relaxed_position=False):
+            result = metrics(image, _box, _landmarks, require_frontal, require_background, relaxed_position)
             if 3 <= int(image[0, 0, 0]) <= 5:
                 result["yaw"] = 0.2
             return result
@@ -331,8 +321,8 @@ class FaceWorkflowTests(unittest.TestCase):
         subject = runtime()
         frames = [frame(index) for index in range(9)]
 
-        def no_return_metrics(image, _box, _landmarks, require_frontal=True):
-            result = metrics(image, _box, _landmarks, require_frontal)
+        def no_return_metrics(image, _box, _landmarks, require_frontal=True, require_background=True, relaxed_position=False):
+            result = metrics(image, _box, _landmarks, require_frontal, require_background, relaxed_position)
             if int(image[0, 0, 0]) >= 6:
                 result["yaw"] = 0.2
             return result

@@ -6,11 +6,11 @@ VoteLedger is an electronic-voting prototype with voter, administrator, election
 
 ## Features
 
-- Voter registration captures a sequence of face frames, checks background, positioning, quality, stability, presentation-attack scores, and duplicate enrollment before account creation; only the encrypted template is retained.
+- Voter registration captures three face frames and checks positioning, image quality, stability, presentation-attack scores, and duplicate enrollment before account creation; a white background is not required, and only the encrypted template is retained.
 - Admin approval; role-based sign-in for voters, admins, election officers, and candidates.
 - Party, alliance, candidate, officer, and election administration.
 - Election lifecycle rules and voting-date validation.
-- Live camera feedback uses RetinaFace bounding boxes to move a tracking box independently of the fixed positioning guide; server checks position, pose, image quality, and background suitability. The camera provides live instructions for a plain white background and one face only.
+- Live camera feedback uses RetinaFace bounding boxes to move a tracking box independently of the fixed positioning guide. Enrollment allows a wider position range and does not require a white background; voting verification retains its stricter position and background checks.
 - Recognition requires a backend-issued, randomized head-turn-and-return challenge, multiple ordered camera frames, and the two-model MiniFASNet passive presentation-attack check. Challenge use is bound to voter, election, browser session, expiration, and one-time consumption.
 - RetinaFace requires exactly one face and supplies five landmarks for ArcFace-compatible alignment.
 - ArcFace produces a 512-dimensional embedding, L2-normalized before cosine-similarity comparison.
@@ -42,8 +42,8 @@ The face service uses the 1.7 MB RetinaFace MobileNet-0.25 ONNX detector and the
 - Detector: the bundled RetinaFace MobileNet-0.25 ONNX model that returns boxes and five landmarks.
 - Recognizer: the InsightFace `buffalo_sc` **ArcFace MobileFaceNet** model whose output is 512-dimensional.
 - Alignment: InsightFace ArcFace five-point similarity transform to the model input size (typically 112×112), from BGR image pixels.
-- Quality checks: minimum image/face dimensions, detector confidence, landmark geometry, face position/size, roll/yaw proxy, blur, brightness, frame-to-frame stability, and near-white background sampling.
-- Background policy: the service estimates the person region from the detected face and samples surrounding pixels. It checks the near-white fraction and brightness uniformity; this is an application-specific policy, not a general face-recognition requirement. It is not semantic human segmentation, so camera framing and threshold calibration matter.
+- Quality checks: minimum image/face dimensions, detector confidence, landmark geometry, face position/size, roll/yaw proxy, blur, brightness, and frame-to-frame stability. Voting verification also checks the near-white background; enrollment does not require it.
+- Background policy: for voting verification, the service estimates the person region from the detected face and samples surrounding pixels. It is not semantic human segmentation, so camera framing and threshold calibration matter.
 - Presentation-attack detection: the two configured MiniFASNet ONNX models score every submitted frame. The service fails startup if PAD is required (the default) and either model is unavailable. The PAD score is an additional probabilistic check, not a guarantee against sophisticated attacks.
 - Similarity: cosine similarity on L2-normalized ArcFace embeddings; the same configured threshold is used for duplicate enrollment and voting verification. The default `0.50` is a starting point only and must be validated against representative genuine/impostor samples for the exact model and deployment; this repository's synthetic unit-test embeddings do not calibrate biometric accuracy.
 - Duplicate enrollment checks compare against every currently enrolled encrypted template, including the requesting voter's existing template. Registration checks and persistence are serialized by a MongoDB-backed expiring lock shared across backend processes; the in-process queue reduces contention but is not the cross-process safeguard.
@@ -134,7 +134,7 @@ In a second terminal, from the project root:
 npm start
 ```
 
-Open `http://localhost:3000`. The camera preview shows a fixed positioning guide and a separate tracking box that follows the detected face. A registrant centers their face and holds a stable pose before five frames are submitted. The server repeats quality, position, background, stability, and PAD checks, compares against existing enrollments, and only then creates a pending account and stores the encrypted template. The voter must be approved before login.
+Open `http://localhost:3000`. The camera preview shows a fixed positioning guide and a separate tracking box that follows the detected face. A registrant keeps one face visible and steady for three frames; the background does not need to be white. The server repeats quality, position, stability, and PAD checks, compares against existing enrollments, and only then creates a pending account and stores the encrypted template. The voter must be approved before login.
 
 For voting, the signed-in voter selects a candidate, passes live position/background checks, and requests a random server-stored left- or right-turn challenge. The browser captures three baseline frames, three movement frames, and three return-to-center frames. The server checks challenge expiry and one-time use, validates the sequence, quality, background, PAD and face match, then issues the existing short-lived authorization bound to the voter, election, browser session, and enrollment version. The vote API independently consumes that authorization; browser-reported success is not sufficient.
 
@@ -185,7 +185,7 @@ All application endpoints are under `/api/blockchain`:
 | `PATCH` | `/api/blockchain/parties/:partyId/logo` | Admin | Replace the logo for an existing party |
 | `GET` | `/api/blockchain/parties` | Authenticated | Party data, including logos shown on the ballot |
 | `POST` | `/api/blockchain/face/assess` | Public, rate limited | Multipart `image`; server-side single-frame guidance only, never an authorization |
-| `POST` | `/api/blockchain/face/enroll` | Approved voter | Multipart `images`; validate multi-frame position, background, quality, stability, PAD, duplicate face, and securely store enrollment |
+| `POST` | `/api/blockchain/face/enroll` | Approved voter | Multipart `images`; validate multi-frame position, quality, stability, PAD, duplicate face, and securely store enrollment |
 | `POST` | `/api/blockchain/face/challenge` | Approved voter | JSON `electionId`; issue a random, session-bound, expiring head-turn challenge |
 | `GET` | `/api/blockchain/face/status` | Voter | Return enrollment status only |
 | `POST` | `/api/blockchain/face/verify` | Approved voter | Multipart nine ordered `images`, `electionId`, and `challengeId`; return verified flag and one-time token only after server-side identity, challenge, and PAD checks |

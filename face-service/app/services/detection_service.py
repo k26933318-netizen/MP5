@@ -124,7 +124,13 @@ class FaceRecognitionRuntime:
         _, landmarks = self.detect_faces(image)
         return self.recognizer.embed(image, landmarks).astype(float).tolist()
 
-    def assess_position(self, image: np.ndarray, require_frontal: bool = True) -> dict:
+    def assess_position(
+        self,
+        image: np.ndarray,
+        require_frontal: bool = True,
+        require_background: bool = True,
+        relaxed_position: bool = False,
+    ) -> dict:
         boxes, landmarks = self.detector.detect(image)
         boxes, landmarks = self._filter_invalid_candidates(image, boxes, landmarks)
         if len(boxes) == 0:
@@ -150,7 +156,7 @@ class FaceRecognitionRuntime:
                 "state": "red",
                 "face": face,
                 "faceCount": len(boxes),
-                "message": f"Detected {len(boxes)} faces. Use a plain white background and keep only one face in view.",
+                "message": f"Detected {len(boxes)} possible faces. Keep only yourself in the camera view.",
             }
         box, points = boxes[0], landmarks[0]
         if float(box[4]) < settings.min_detection_score:
@@ -172,8 +178,11 @@ class FaceRecognitionRuntime:
             "frameHeight": int(image.shape[0]),
         }
         try:
-            self._validate_face(image, box, points)
-            assess_face(image, box, points, require_frontal=require_frontal)
+            self._validate_face(image, box, points, relaxed_position=relaxed_position)
+            assess_face(
+                image, box, points, require_frontal=require_frontal,
+                require_background=require_background, relaxed_position=relaxed_position,
+            )
         except HTTPException as exc:
             detail = exc.detail if isinstance(exc.detail, dict) else {}
             _log_face_failure(
@@ -184,10 +193,6 @@ class FaceRecognitionRuntime:
             )
             detail["face"] = face
             detail["faceCount"] = 1
-            if detail.get("code") == "IMAGE_CONDITIONS_UNSUITABLE":
-                detail["message"] = (
-                    "Use a plain white, evenly lit background and keep only one face in view."
-                )
             raise
         return {
             "ready": True,
@@ -200,13 +205,13 @@ class FaceRecognitionRuntime:
     def analyze_frames(self, images: list[np.ndarray], mode: str, action: str | None = None) -> dict:
         stage_size = settings.challenge_frames_per_stage
         if mode == "enroll":
-            if len(images) < 5 or len(images) > 8:
+            if len(images) < 3 or len(images) > 8:
                 raise HTTPException(status_code=400, detail={
                     "code": "INVALID_FRAME_COUNT",
-                    "message": "Capture at least five steady frames to enroll.",
+                    "message": "Capture at least three steady frames to enroll.",
                 })
-            analysis = [self._analyze_frame(image, True) for image in images]
-            self._require_stable(analysis)
+            analysis = [self._analyze_frame(image, True, require_background=False, relaxed_position=True) for image in images]
+            self._require_stable(analysis, min(0.25, settings.face_stability_tolerance * 1.5))
             usable = analysis
         elif mode == "verify":
             if action not in {"turn_left", "turn_right"} or len(images) != stage_size * 3:
@@ -271,12 +276,19 @@ class FaceRecognitionRuntime:
             "embedding": (embedding / norm).astype(float).tolist(),
             "dimension": 512,
             "model_version": self.model_version,
-            "checks": {"position": True, "background": True, "quality": True, "stable": True,
+            "checks": {"position": True, "quality": True, "stable": True,
                        "head_movement": mode == "verify", "presentation_attack": True,
-                       "antispoof_score": score},
+                       "antispoof_score": score,
+                       **({"background": True} if mode == "verify" else {})},
         }
 
-    def _analyze_frame(self, image: np.ndarray, require_frontal: bool) -> dict:
+    def _analyze_frame(
+        self,
+        image: np.ndarray,
+        require_frontal: bool,
+        require_background: bool = True,
+        relaxed_position: bool = False,
+    ) -> dict:
         boxes, landmarks = self.detector.detect(image)
         boxes, landmarks = self._filter_invalid_candidates(image, boxes, landmarks)
         if len(boxes) == 0:
@@ -299,8 +311,11 @@ class FaceRecognitionRuntime:
                 "message": "Face could not be detected clearly in every required frame.",
             })
         try:
-            self._validate_face(image, box, points)
-            metrics = assess_face(image, box, points, require_frontal=require_frontal)
+            self._validate_face(image, box, points, relaxed_position=relaxed_position)
+            metrics = assess_face(
+                image, box, points, require_frontal=require_frontal,
+                require_background=require_background, relaxed_position=relaxed_position,
+            )
         except HTTPException as exc:
             detail = exc.detail if isinstance(exc.detail, dict) else {}
             _log_face_failure(
@@ -312,25 +327,30 @@ class FaceRecognitionRuntime:
             raise
         return {"image": image, "box": box, "landmarks": points, "metrics": metrics}
 
-    def _validate_face(self, image: np.ndarray, box: np.ndarray, points: np.ndarray) -> None:
+    def _validate_face(
+        self, image: np.ndarray, box: np.ndarray, points: np.ndarray, relaxed_position: bool = False
+    ) -> None:
         from app.utils.image_utils import validate_face_quality
-        validate_face_quality(image, box, points)
+        validate_face_quality(image, box, points, min_blur=15 if relaxed_position else 25)
 
-    def _position_in_guide(self, frames: list[dict]) -> bool:
+    def _position_in_guide(self, frames: list[dict], tolerance_scale: float = 1.5) -> bool:
         return all(
-            abs(item["metrics"]["center_x"] - 0.5) <= settings.face_center_x_tolerance * 1.5
-            and abs(item["metrics"]["center_y"] - 0.46) <= settings.face_center_y_tolerance * 1.5
+            abs(item["metrics"]["center_x"] - 0.5) <= settings.face_center_x_tolerance * tolerance_scale
+            and abs(item["metrics"]["center_y"] - 0.46) <= settings.face_center_y_tolerance * tolerance_scale
             for item in frames
         )
 
-    def _require_stable(self, frames: list[dict]) -> None:
+    def _require_stable(self, frames: list[dict], tolerance: float | None = None) -> None:
+        relaxed = tolerance is not None
+        tolerance = settings.face_stability_tolerance if tolerance is None else tolerance
         centers = np.asarray([
             [item["metrics"]["center_x"], item["metrics"]["center_y"], item["metrics"]["width_fraction"]]
             for item in frames
         ])
-        if (not self._position_in_guide(frames) or
-                float(np.max(np.ptp(centers[:, :2], axis=0))) > settings.face_stability_tolerance or
-                float(np.ptp(centers[:, 2])) > settings.face_stability_tolerance):
+        tolerance_scale = 2.0 if relaxed else 1.5
+        if (not self._position_in_guide(frames, tolerance_scale) or
+                float(np.max(np.ptp(centers[:, :2], axis=0))) > tolerance or
+                float(np.ptp(centers[:, 2])) > tolerance):
             raise HTTPException(status_code=422, detail={
                 "code": "UNSTABLE_POSITION",
                 "message": "Hold your face steady inside the guide and capture again.",

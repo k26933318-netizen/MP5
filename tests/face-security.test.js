@@ -305,6 +305,9 @@ test('registration frontend requires backend-confirmed enrollment and protects i
   assert.match(source, /activeCameraStream !== assessmentStream/);
   assert.match(source, /if \(submitting \|\| assessing \|\| currentStage === 'submitting'\) return/);
   assert.match(source, /message\.textContent = error\.message/);
+  assert.match(source, /mode === 'enroll' \|\| mode === 'registration'/);
+  assert.match(source, /requiredStableFrames = enrollmentMode \? 3 : 5/);
+  assert.match(source, /workflow', enrollmentMode \? 'enroll' : 'verify'/);
 });
 
 async function withFaceVerificationStubs({

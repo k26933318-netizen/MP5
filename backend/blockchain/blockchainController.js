@@ -96,10 +96,11 @@ function faceChallengeFramesPerStage() {
   return framesPerStage;
 }
 
-function requireValidFaceAnalysis(result) {
+function requireValidFaceAnalysis(result, { requireBackground = true } = {}) {
   if (!result || result.dimension !== 512 || !Array.isArray(result.embedding) ||
       typeof result.model_version !== 'string' || !result.model_version ||
-      !result.checks || result.checks.position !== true || result.checks.background !== true ||
+      !result.checks || result.checks.position !== true ||
+      (requireBackground && result.checks.background !== true) ||
       result.checks.quality !== true || result.checks.stable !== true ||
       result.checks.presentation_attack !== true) {
     const error = new Error('Face analysis did not confirm every required server-side check.');
@@ -156,7 +157,8 @@ module.exports = {
   logout: asyncRoute(async (request, response) => { auth.logout(request); return response.json({ success: true }); }),
   assessFace: asyncRoute(async (request, response) => {
     const image = requireFaceImage(request);
-    const result = await faceClient.assessPosition(image, request.body?.stage || 'position');
+    const workflow = request.body?.workflow === 'enroll' ? 'enroll' : 'verify';
+    const result = await faceClient.assessPosition(image, request.body?.stage || 'position', workflow);
     return response.json({
       ready: result.ready === true,
       state: ['red', 'yellow'].includes(result.state) ? result.state : 'red',
@@ -184,7 +186,7 @@ module.exports = {
     }
     const images = requireFaceImages(request);
     const result = await faceClient.enrollFrames(images);
-    requireValidFaceAnalysis(result);
+    requireValidFaceAnalysis(result, { requireBackground: false });
 
     const encrypted = encryptEmbedding(result.embedding);
     const voter = await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
@@ -224,7 +226,7 @@ module.exports = {
         throw error;
       }
       const result = await faceClient.enrollFrames(images);
-      requireValidFaceAnalysis(result);
+      requireValidFaceAnalysis(result, { requireBackground: false });
       const encrypted = encryptEmbedding(result.embedding);
       await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
         await ensureFaceIsNotRegistered(result.embedding, result.model_version);

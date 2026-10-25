@@ -213,7 +213,14 @@ def background_metrics(image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarra
     return metrics
 
 
-def assess_face(image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarray, require_frontal: bool = True) -> dict:
+def assess_face(
+    image: np.ndarray,
+    bbox: np.ndarray,
+    landmarks: np.ndarray,
+    require_frontal: bool = True,
+    require_background: bool = True,
+    relaxed_position: bool = False,
+) -> dict:
     height, width = image.shape[:2]
     x1, y1, x2, y2 = (float(value) for value in bbox[:4])
     face_width = x2 - x1
@@ -223,16 +230,20 @@ def assess_face(image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarray, requ
     center_x = (x1 + x2) / (2 * width)
     center_y = (y1 + y2) / (2 * height)
     width_fraction = face_width / width
-    if width_fraction < settings.face_min_width_fraction:
+    min_width_fraction = settings.face_min_width_fraction * (0.70 if relaxed_position else 1.0)
+    max_width_fraction = min(1.0, settings.face_max_width_fraction * (1.15 if relaxed_position else 1.0))
+    center_x_tolerance = min(0.5, settings.face_center_x_tolerance * (1.4 if relaxed_position else 1.0))
+    center_y_tolerance = min(0.5, settings.face_center_y_tolerance * (1.4 if relaxed_position else 1.0))
+    if width_fraction < min_width_fraction:
         _reject("FACE_TOO_SMALL", "Move closer to the camera.", "yellow")
-    if width_fraction > settings.face_max_width_fraction:
+    if width_fraction > max_width_fraction:
         _reject("FACE_TOO_LARGE", "Move farther from the camera.", "yellow")
     if x1 < 0 or y1 < 0 or x2 > width or y2 > height:
         _reject("FACE_CROPPED", "Keep your complete face inside the frame.")
-    if abs(center_x - 0.5) > settings.face_center_x_tolerance:
+    if abs(center_x - 0.5) > center_x_tolerance:
         direction = "right" if center_x < 0.5 else "left"
         _reject("FACE_OFF_CENTER", f"Move slightly {direction} to center your face.", "yellow")
-    if abs(center_y - 0.46) > settings.face_center_y_tolerance:
+    if abs(center_y - 0.46) > center_y_tolerance:
         direction = "down" if center_y < 0.46 else "up"
         _reject("FACE_OFF_CENTER", f"Move slightly {direction} to center your face.", "yellow")
     if landmarks.shape != (5, 2) or not np.isfinite(landmarks).all():
@@ -249,32 +260,37 @@ def assess_face(image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarray, requ
     yaw = _yaw_proxy(landmarks)
     eye_to_mouth = float(mouth_midpoint[1] - eye_midpoint[1])
     pitch = float((nose[1] - eye_midpoint[1]) / eye_to_mouth) if eye_to_mouth > 1e-6 else float("inf")
-    if (roll > settings.face_max_roll_degrees or
-            (require_frontal and abs(yaw) > settings.face_max_yaw_proxy) or
-            abs(pitch - 0.5) > settings.face_max_pitch_deviation):
+    max_roll = min(45, settings.face_max_roll_degrees + (6 if relaxed_position else 0))
+    max_yaw = min(1, settings.face_max_yaw_proxy * (1.4 if relaxed_position else 1.0))
+    max_pitch_deviation = min(0.5, settings.face_max_pitch_deviation * (1.35 if relaxed_position else 1.0))
+    if (roll > max_roll or
+            (require_frontal and abs(yaw) > max_yaw) or
+            abs(pitch - 0.5) > max_pitch_deviation):
         _reject("FACE_POSE", "Keep your face straight and look toward the camera.", "yellow")
 
     face = image[max(0, int(y1)):min(height, int(y2)), max(0, int(x1)):min(width, int(x2))]
     gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
     blur = float(cv2.Laplacian(gray, cv2.CV_64F).var())
     brightness = float(gray.mean())
-    if blur < 25:
+    if blur < (15 if relaxed_position else 25):
         _reject("BLURRY", "Hold still so the image is sharp.")
     if brightness < 35 or brightness > 220:
         _reject("BAD_LIGHTING", "Improve the lighting on your face.")
 
-    try:
-        background = background_metrics(image, bbox, landmarks)
-    except BackgroundEstimationError:
-        _reject(
-            "BACKGROUND_ESTIMATION_FAILED",
-            "Unable to verify your face. Please retry.",
-        )
-    if background["failure_conditions"]:
-        _reject(
-            "IMAGE_CONDITIONS_UNSUITABLE",
-            "Use a plain white, evenly lit background and keep only one face in view.",
-        )
+    background = None
+    if require_background:
+        try:
+            background = background_metrics(image, bbox, landmarks)
+        except BackgroundEstimationError:
+            _reject(
+                "BACKGROUND_ESTIMATION_FAILED",
+                "Unable to verify your face. Please retry.",
+            )
+        if background["failure_conditions"]:
+            _reject(
+                "IMAGE_CONDITIONS_UNSUITABLE",
+                "Use a plain white, evenly lit background and keep only one face in view.",
+            )
     return {
         "center_x": center_x,
         "center_y": center_y,

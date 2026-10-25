@@ -35,7 +35,9 @@ def decode_image(image_bytes: bytes, content_type: str) -> np.ndarray:
     return image
 
 
-def validate_face_quality(image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarray) -> None:
+def validate_face_quality(
+    image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarray, min_blur: float = 25
+) -> None:
     x1, y1, x2, y2 = [int(round(value)) for value in bbox[:4]]
     height, width = image.shape[:2]
     x1, x2 = max(0, x1), min(width, x2)
@@ -52,7 +54,7 @@ def validate_face_quality(image: np.ndarray, bbox: np.ndarray, landmarks: np.nda
     gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
     blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
     brightness = float(gray.mean())
-    if blur_score < 25 or brightness < 35 or brightness > 220:
+    if blur_score < min_blur or brightness < 35 or brightness > 220:
         _low_quality("Please capture a sharper image in even lighting.")
 
 

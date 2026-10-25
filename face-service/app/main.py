@@ -165,6 +165,7 @@ async def assess_position(
     image: Annotated[UploadFile, File()],
     x_face_service_key: Annotated[str, Header()],
     stage: Annotated[str, Form()] = "position",
+    workflow: Annotated[str, Form()] = "verify",
 ):
     authorize(x_face_service_key)
     if runtime is None:
@@ -194,7 +195,17 @@ async def assess_position(
                 "code": "INVALID_ASSESSMENT_STAGE",
                 "message": "The face assessment stage is invalid.",
             })
-        return runtime.assess_position(decoded, require_frontal=stage != "turn")
+        if workflow not in {"enroll", "verify"}:
+            raise HTTPException(status_code=400, detail={
+                "code": "INVALID_ASSESSMENT_WORKFLOW",
+                "message": "The face assessment workflow is invalid.",
+            })
+        return runtime.assess_position(
+            decoded,
+            require_frontal=stage != "turn",
+            require_background=workflow == "verify",
+            relaxed_position=workflow == "enroll",
+        )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}
         return JSONResponse(status_code=200, content={

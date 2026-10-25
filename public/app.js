@@ -732,7 +732,11 @@ function legacyCameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel
 }
 
 function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSuccess, onBack, mode }) {
-  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>Use a plain white, evenly lit background.</li><li>Keep only one face in the camera view.</li><li>Center your face inside the guide and hold still.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera to receive live positioning instructions.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
+  const enrollmentMode = mode === 'enroll' || mode === 'registration';
+  const backgroundTip = enrollmentMode
+    ? 'Use even lighting; your background does not need to be white.'
+    : 'Use a plain white, evenly lit background.';
+  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>${backgroundTip}</li><li>Keep only one face in the camera view.</li><li>Keep your face inside the guide.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera to receive live positioning instructions.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
   const video = document.querySelector('#face-video');
   const canvas = document.querySelector('#face-canvas');
   const message = document.querySelector('#camera-message');
@@ -748,10 +752,10 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   const actionButton = document.querySelector('#camera-action');
   const retryButton = document.querySelector('#camera-retry');
   const assessmentFrames = [];
-  const requiredStableFrames = 5;
+  const requiredStableFrames = enrollmentMode ? 3 : 5;
   const trackingPaddingFraction = 0.12;
-  const stableCenterTolerance = 0.025;
-  const stableSizeTolerance = 0.025;
+  const stableCenterTolerance = enrollmentMode ? 0.06 : 0.025;
+  const stableSizeTolerance = enrollmentMode ? 0.06 : 0.025;
   let readyCount = 0;
   let assessing = false;
   let previousFace = null;
@@ -866,6 +870,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       const data = new FormData();
       data.append('image', blob, 'preview.jpg');
       data.append('stage', currentStage);
+      data.append('workflow', enrollmentMode ? 'enroll' : 'verify');
       const response = await fetch('/api/blockchain/face/assess', {
         method: 'POST',
         headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
@@ -903,7 +908,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       } else {
         assessmentFrames.length = 0;
         actionButton.disabled = true;
-        setCameraMessage(result.message || 'Use a plain white background and keep only one face in view.', result.state === 'yellow' ? 'yellow' : 'red');
+        setCameraMessage(result.message || 'Keep only yourself in the camera view and hold still.', result.state === 'yellow' ? 'yellow' : 'red');
       }
     } catch (error) {
       readyCount = 0;
