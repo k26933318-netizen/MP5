@@ -3,12 +3,13 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
-const databaseName = process.env.MONGODB_DATABASE || 'voting_system';
+const databaseName = process.env.MONGODB_DATABASE || 'VotingSystem';
 const FACE_ENROLLMENT_LOCK_ID = 'face-enrollment';
 const FACE_ENROLLMENT_LOCK_LEASE_MS = 2 * 60 * 1000;
 const FACE_ENROLLMENT_LOCK_WAIT_MS = 30 * 1000;
 let client;
 let database;
+let databasePromise;
 
 const VALID_ELECTION_STATES = ['DRAFT', 'UPCOMING', 'ACTIVE', 'CLOSED', 'RESULTS_DECLARED'];
 const VALID_ELECTION_TRANSITIONS = {
@@ -19,20 +20,28 @@ const VALID_ELECTION_TRANSITIONS = {
 };
 
 async function db() {
-  if (!database) {
-    client = new MongoClient(uri, {
-      serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000)
-    });
+  if (database) return database;
+  if (!databasePromise) {
+    databasePromise = initializeDatabase();
+  }
+  const connectionAttempt = databasePromise;
+  try {
+    return await connectionAttempt;
+  } catch (error) {
+    if (databasePromise === connectionAttempt) databasePromise = null;
+    throw error;
+  }
+}
+
+async function initializeDatabase() {
+  const mongoClient = new MongoClient(uri, {
+    serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000)
+  });
+  try {
+    await mongoClient.connect();
+    const connectedDatabase = mongoClient.db(databaseName);
     try {
-      await client.connect();
-    } catch (error) {
-      await client.close();
-      client = null;
-      throw error;
-    }
-    database = client.db(databaseName);
-    try {
-      await database.collection('faceEnrollmentLocks').insertOne({
+      await connectedDatabase.collection('faceEnrollmentLocks').insertOne({
         _id: FACE_ENROLLMENT_LOCK_ID,
         owner: null,
         expiresAt: new Date(0)
@@ -40,29 +49,38 @@ async function db() {
     } catch (error) {
       if (error.code !== 11000) throw error;
     }
-    await database.collection('voters').createIndex({ voterId: 1 }, { unique: true });
-    await database.collection('faceEncodings').createIndex({ voterId: 1 }, { unique: true });
-    await database.collection('faceChallenges').createIndex({ challengeId: 1 }, { unique: true });
-    await database.collection('faceChallenges').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-    await database.collection('faceEncodings').updateMany(
+    await connectedDatabase.collection('voters').createIndex({ voterId: 1 }, { unique: true });
+    await connectedDatabase.collection('faceEncodings').createIndex({ voterId: 1 }, { unique: true });
+    await connectedDatabase.collection('faceChallenges').createIndex({ challengeId: 1 }, { unique: true });
+    await connectedDatabase.collection('faceChallenges').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+    await connectedDatabase.collection('faceEncodings').updateMany(
       { enrolled: { $exists: false } },
       {
         $set: { enrolled: false, updatedAt: new Date() },
         $unset: { encryptedEmbedding: '' }
       }
     );
-    await database.collection('voteClaims').createIndex({ electionId: 1, voterHash: 1 }, { unique: true });
-    await database.collection('voteClaims').createIndex({ createdAt: -1 });
-    await database.collection('elections').createIndex({ electionId: 1 }, { unique: true });
-    await database.collection('candidates').createIndex({ candidateId: 1 }, { unique: true });
-    await database.collection('auditLogs').createIndex({ timestamp: -1 });
-    await database.collection('auditLogs').createIndex({ eventType: 1 });
-    await seed();
+    await connectedDatabase.collection('voteClaims').createIndex({ electionId: 1, voterHash: 1 }, { unique: true });
+    await connectedDatabase.collection('voteClaims').createIndex({ createdAt: -1 });
+    await connectedDatabase.collection('elections').createIndex({ electionId: 1 }, { unique: true });
+    await connectedDatabase.collection('candidates').createIndex({ candidateId: 1 }, { unique: true });
+    await connectedDatabase.collection('auditLogs').createIndex({ timestamp: -1 });
+    await connectedDatabase.collection('auditLogs').createIndex({ eventType: 1 });
+    await seed(connectedDatabase);
+    client = mongoClient;
+    database = connectedDatabase;
+    return connectedDatabase;
+  } catch (error) {
+    try {
+      await mongoClient.close();
+    } catch (closeError) {
+      console.error('Failed to close MongoDB client after initialization error:', closeError.message);
+    }
+    throw error;
   }
-  return database;
 }
 
-async function seed() {
+async function seed(database) {
   const elections = database.collection('elections');
   const candidates = database.collection('candidates');
   const parties = database.collection('parties');
@@ -598,9 +616,12 @@ async function healthCheck() {
   return 'ok';
 }
 async function closeConnection() {
-  if (client) await client.close();
+  if (databasePromise) await databasePromise;
+  const mongoClient = client;
   client = null;
   database = null;
+  databasePromise = null;
+  if (mongoClient) await mongoClient.close();
 }
 async function logAudit(action, fields = {}) {
   const allowed = ['eventId', 'eventType', 'actorId', 'actorRole', 'timestamp', 'resourceType', 'resourceId', 'status', 'description'];

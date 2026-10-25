@@ -24,8 +24,8 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacy
 app.use((request, response, next) => {
   const origin = request.headers.origin;
   if (!origin) return next();
-  const allowed = ['http://localhost:3000', 'http://127.0.0.1:3000'];
-  if (allowed.includes(origin)) response.setHeader('Access-Control-Allow-Origin', origin);
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+    if (allowedOrigins.includes(origin)) response.setHeader('Access-Control-Allow-Origin', origin);
   response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-blockchain-api-key');
   response.setHeader('Access-Control-Allow-Credentials', 'true');

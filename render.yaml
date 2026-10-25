@@ -17,29 +17,16 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: FACE_SERVICE_URL
-        value: http://mp5-face-service:10000
+        fromService:
+          type: web
+          name: mp5-face-service
+          envVarKey: RENDER_EXTERNAL_URL
       - key: FACE_SERVICE_API_KEY
         sync: false
       - key: FACE_ENCRYPTION_KEY
         sync: false
       - key: BLOCKCHAIN_BACKEND
-        value: fabric
-      - key: FABRIC_MSP_ID
-        value: Org1MSP
-      - key: FABRIC_CHANNEL
-        value: votingchannel
-      - key: FABRIC_CHAINCODE
-        value: voting-chaincode
-      - key: FABRIC_PEER_ENDPOINT
-        sync: false
-      - key: FABRIC_PEER_HOST_ALIAS
-        sync: false
-      - key: FABRIC_TLS_CERT_PATH
-        value: /etc/secrets/peer-ca.pem
-      - key: FABRIC_CERT_PATH
-        value: /etc/secrets/user-cert.pem
-      - key: FABRIC_KEY_PATH
-        value: /etc/secrets/user-key.pem
+        value: local
 
   - type: web
     name: mp5-face-service
