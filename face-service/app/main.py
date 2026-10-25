@@ -251,6 +251,25 @@ async def enroll_frames(
     return runtime.analyze_frames(await read_frames(images), "enroll")
 
 
+@app.post("/frames/enroll-challenge")
+async def enroll_challenge_frames(
+    images: Annotated[list[UploadFile], File()],
+    challenge_action: Annotated[str, Form()],
+    x_face_service_key: Annotated[str, Header()],
+):
+    authorize(x_face_service_key)
+    if runtime is None:
+        raise HTTPException(status_code=503, detail={
+            "code": "FACE_SERVICE_UNAVAILABLE",
+            "message": "Face models are unavailable.",
+        })
+    return runtime.analyze_frames(
+        await read_frames(images),
+        "enroll-challenge",
+        challenge_action,
+    )
+
+
 @app.post("/frames/verify")
 async def verify_frames(
     images: Annotated[list[UploadFile], File()],

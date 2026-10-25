@@ -733,6 +733,7 @@ function legacyCameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel
 
 function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSuccess, onBack, mode }) {
   const enrollmentMode = mode === 'enroll' || mode === 'registration';
+  const challengeMode = mode === 'verify' || enrollmentMode;
   const cameraTip = enrollmentMode
     ? 'Use even lighting; your background does not need to be white.'
     : 'Use a plain white, evenly lit background.';
@@ -755,7 +756,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   const actionButton = document.querySelector('#camera-action');
   const retryButton = document.querySelector('#camera-retry');
   const assessmentFrames = [];
-  const requiredStableFrames = enrollmentMode ? 3 : 2;
+  const requiredStableFrames = challengeMode ? 3 : 2;
   const trackingPaddingFraction = 0.12;
   const stableCenterTolerance = 0.05;
   const stableSizeTolerance = 0.05;
@@ -909,11 +910,12 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
           actionButton.disabled = false;
           actionButton.textContent = currentStage === 'return'
             ? 'Capture return frames'
-            : mode === 'verify' ? 'Start liveness challenge' : actionLabel;
+            : currentStage === 'turn' ? 'Capture head movement'
+              : challengeMode ? 'Start liveness challenge' : actionLabel;
         } else {
           setCameraMessage(result.message || 'Hold still while position stabilizes.', 'yellow');
           actionButton.disabled = true;
-          if (mode === 'verify' && currentStage === 'position') actionButton.textContent = 'Stabilizing face position';
+          if (challengeMode && currentStage === 'position') actionButton.textContent = 'Stabilizing face position';
         }
       } else {
         assessmentFrames.length = 0;
@@ -947,7 +949,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     return captured;
   }
 
-  async function submitFrames(frames, challengeId = '') {
+  async function submitFrames(frames, challengeId = '', challengeAction = '') {
     if (submitting || currentStage === 'submitting') return;
     submitting = true;
     currentStage = 'submitting';
@@ -962,6 +964,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     frames.forEach((frame, index) => form.append('images', frame, `face-${index + 1}.jpg`));
     for (const [name, value] of Object.entries(fields)) form.append(name, value);
     if (challengeId) form.append('challengeId', challengeId);
+    if (challengeAction) form.append('challengeAction', challengeAction);
     try {
       const response = await fetch(`/api/blockchain${endpoint}`, {
         method: 'POST',
@@ -1004,15 +1007,23 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
 
   async function startChallenge() {
     actionButton.disabled = true;
-    setCameraMessage('Preparing a server-issued liveness challenge...');
+    setCameraMessage(enrollmentMode
+      ? 'Preparing your randomized face movement check...'
+      : 'Preparing a server-issued liveness challenge...');
     try {
-      const response = await fetch('/api/blockchain/face/challenge', {
+      const challengePath = enrollmentMode
+        ? '/api/blockchain/face/enrollment-challenge'
+        : '/api/blockchain/face/challenge';
+      const challengeBody = enrollmentMode
+        ? { voterId: fields.voterId || '' }
+        : { electionId: fields.electionId };
+      const response = await fetch(challengePath, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {})
         },
-        body: JSON.stringify({ electionId: fields.electionId })
+        body: JSON.stringify(challengeBody)
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'Could not start the liveness check.');
@@ -1033,7 +1044,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     } catch (error) {
       showCameraError(error);
       actionButton.disabled = false;
-      actionButton.textContent = mode === 'verify' ? 'Start liveness challenge' : actionLabel;
+      actionButton.textContent = challengeMode ? 'Start liveness challenge' : actionLabel;
     }
   }
 
@@ -1067,7 +1078,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       startButton.hidden = true;
       actionButton.hidden = false;
       actionButton.disabled = true;
-      actionButton.textContent = mode === 'verify' ? 'Stabilizing face position' : actionLabel;
+      actionButton.textContent = challengeMode ? 'Stabilizing face position' : actionLabel;
       setCameraMessage('Center your face in the guide and hold still.', 'yellow');
       faceAssessmentTimer = setInterval(() => assessCurrentFrame(), enrollmentMode ? 900 : 1600);
       await assessCurrentFrame();
@@ -1085,7 +1096,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
 
   actionButton.onclick = async () => {
     if (actionButton.disabled || (assessing && !enrollmentMode) || submitting) return;
-    if (mode !== 'verify') {
+    if (!challengeMode) {
       actionButton.disabled = true;
       setCameraMessage('Using the clear frame already checked. Hold still.', 'yellow');
       try {
@@ -1125,7 +1136,11 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       try {
         const returnFrames = await captureBurst(challenge.framesPerStage);
         const challengeId = challenge.challengeId;
-        await submitFrames([...baselineFrames, ...turnFrames, ...returnFrames], challengeId);
+        await submitFrames(
+          [...baselineFrames, ...turnFrames, ...returnFrames],
+          challengeId,
+          enrollmentMode ? challenge.action : ''
+        );
       } catch (error) {
         expireChallenge();
         showCameraError(error);
@@ -1144,7 +1159,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     turnFrames = [];
     actionButton.hidden = false;
     actionButton.disabled = true;
-    actionButton.textContent = 'Start liveness challenge';
+    actionButton.textContent = challengeMode ? 'Start liveness challenge' : actionLabel;
     setCameraMessage('Center your face and hold still.', 'yellow');
   };
 }
