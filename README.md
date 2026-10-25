@@ -156,6 +156,14 @@ docker compose -f docker-compose.app.yml -f docker-compose.fabric.yml up --build
 
 The face service is only exposed to the Docker network, not published on a host port. MongoDB data is persisted in a named volume. The compose setup is for development; it does not configure production TLS, backups, key management, monitoring, or network policies.
 
+## Render deployment
+
+Deploy `face-service` as a Docker web service with `face-service` as its root directory and its `Dockerfile` as the Dockerfile path. The container binds to Render's `PORT` value (and defaults to port 8000 for local Docker use).
+
+Configure the face service with a strong `FACE_SERVICE_API_KEY` (at least 32 characters). Configure the Node backend with the same key and set `FACE_SERVICE_URL` to the face service's internal URL shown in the Render dashboard; do not use `127.0.0.1` or `localhost` between separate Render services.
+
+The service also requires both MiniFASNet files and the InsightFace model cache. The Docker image does not contain the MiniFASNet files: provide them in the service container using a persistent disk or include approved model assets in the build, then set `FACE_ANTISPOOF_MODEL_A_PATH` and `FACE_ANTISPOOF_MODEL_B_PATH` to their absolute paths. Keep `FACE_REQUIRE_ANTISPOOF=true`. Set `INSIGHTFACE_MODEL_ROOT` to a writable persistent-disk directory if you want the downloaded `buffalo_l` cache to survive restarts. The first startup downloads/loads the InsightFace models and may take longer than subsequent starts.
+
 ## API
 
 All application endpoints are under `/api/blockchain`:
