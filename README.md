@@ -35,7 +35,7 @@ Browser camera
        -> Local development ledger OR explicitly configured Hyperledger Fabric
 ```
 
-InsightFace `buffalo_l` recognition/detection weights are not included; the local profile reuses the cache installed by FRS2 at `INSIGHTFACE_MODEL_ROOT`. The two MiniFASNet ONNX anti-spoof models are expected under `FRS2/face-recognition-app/models` for local execution and mounted from `FACE_ANTISPOOF_MODEL_DIR` in Docker. Review licenses and provenance for all model files; the project code does not grant model rights. Keep model files outside version control where their license or size requires it.
+InsightFace `buffalo_l` recognition/detection weights are not included; the local profile reuses the cache installed by FRS2 at `INSIGHTFACE_MODEL_ROOT`. The two MiniFASNet ONNX anti-spoof models are expected under `FRS2/face-recognition-app/models` for local execution and are copied into `face-service/models` for deployment. Review licenses and provenance for all model files; the project code does not grant model rights. The training `.pth` files and InsightFace cache remain outside version control.
 
 ### Face model contract
 
@@ -56,7 +56,7 @@ The service loads its face-recognition and anti-spoof models once at startup and
 - MongoDB 7 or a compatible MongoDB deployment.
 - Python 3.11 or 3.12 for the pinned face-service dependencies.
 - The FRS2 `buffalo_l` cache under `INSIGHTFACE_MODEL_ROOT`, including `det_10g.onnx` and `w600k_r50.onnx`.
-- The two local MiniFASNet ONNX files (`minifasnet_a.onnx` and `minifasnet_b.onnx`) already present under `FRS2/face-recognition-app/models`; Docker mounts this directory read-only.
+- The two MiniFASNet ONNX files (`minifasnet_a.onnx` and `minifasnet_b.onnx`) under `FRS2/face-recognition-app/models` for local execution; deploys use the copies under `face-service/models`.
 - A modern browser with camera access. Camera access requires HTTPS, except for localhost.
 
 ## Configuration
@@ -107,7 +107,7 @@ The local model root must contain `models\buffalo_l` with its detector and recog
 
 Background checks use OpenCV GrabCut foreground segmentation initialized with face landmarks' detection box, a head/hair estimate, and a shoulder/body prior; pixels marked uncertain foreground are excluded from the denominator. The configured threshold is applied to near-white pixels divided by valid estimated background pixels. `FACE_BACKGROUND_MIN_WHITE_FRACTION` defaults to 0.60 and can be configured from 0.50 to 0.75; `FACE_BACKGROUND_MIN_BRIGHTNESS` and `FACE_BACKGROUND_MAX_STDDEV` tune near-white classification and uniformity. `FACE_DIAGNOSTICS_ENABLED` writes structured validation diagnostics to the face-service development logs; keep it disabled for production. The mask is an estimate, not semantic segmentation, and still needs calibration on representative webcams. The server returns only generic user guidance and does not expose background scores or thresholds through the API.
 
-The voting face service requires both local PAD models. For local execution, its defaults resolve to the two `.onnx` files in `FRS2/face-recognition-app/models`. For Docker, `FACE_ANTISPOOF_MODEL_DIR` must point to that directory; Compose mounts it read-only at `/anti-spoof`. `FACE_REQUIRE_ANTISPOOF` must remain `true`; the service fails startup rather than treating head movement alone as presentation-attack detection.
+The voting face service requires both PAD models. For local execution, its defaults resolve to the two `.onnx` files in `FRS2/face-recognition-app/models`. Native Render deploys use the tracked copies in `face-service/models`; Docker Compose mounts the local model directory read-only at `/anti-spoof`. `FACE_REQUIRE_ANTISPOOF` must remain `true`; the service fails startup rather than treating head movement alone as presentation-attack detection.
 
 ## Local installation and running
 
@@ -156,13 +156,20 @@ docker compose -f docker-compose.app.yml -f docker-compose.fabric.yml up --build
 
 The face service is only exposed to the Docker network, not published on a host port. MongoDB data is persisted in a named volume. The compose setup is for development; it does not configure production TLS, backups, key management, monitoring, or network policies.
 
-## Render deployment
+## Render deployment (native runtimes)
 
-Deploy `face-service` as a Docker web service with `face-service` as its root directory and its `Dockerfile` as the Dockerfile path. The container binds to Render's `PORT` value (and defaults to port 8000 for local Docker use).
+The root `render.yaml` defines two native Render web services; Docker is not used:
 
-Configure the face service with a strong `FACE_SERVICE_API_KEY` (at least 32 characters). Configure the Node backend with the same key and set `FACE_SERVICE_URL` to the face service's internal URL shown in the Render dashboard; do not use `127.0.0.1` or `localhost` between separate Render services.
+- `mp5-backend` runs the Node.js/Express API and serves the frontend.
+- `mp5-face-service` runs the Python FastAPI recognition service from `face-service/`.
 
-The service also requires both MiniFASNet files and the InsightFace model cache. The Docker image does not contain the MiniFASNet files: provide them in the service container using a persistent disk or include approved model assets in the build, then set `FACE_ANTISPOOF_MODEL_A_PATH` and `FACE_ANTISPOOF_MODEL_B_PATH` to their absolute paths. Keep `FACE_REQUIRE_ANTISPOOF=true`. Set `INSIGHTFACE_MODEL_ROOT` to a writable persistent-disk directory if you want the downloaded `buffalo_l` cache to survive restarts. The first startup downloads/loads the InsightFace models and may take longer than subsequent starts.
+In Render, create a Blueprint from this repository and review its environment variables before deploying. Set `MONGODB_URI` to the Atlas driver URI on `mp5-backend` and use the same strong, random `FACE_SERVICE_API_KEY` on both services. Set `FACE_SERVICE_URL` on the backend to the face service's Render internal URL (never `localhost`). Set `FACE_ENCRYPTION_KEY` to a separate random 32-byte key and provide a strong `ADMIN_USERNAME` and `ADMIN_PASSWORD`. In Atlas, grant the database user read/write access to this database and configure Network Access for the backend's Render outbound connections.
+
+The two runtime MiniFASNet ONNX files are included under `face-service/models/`; training `.pth` files, virtual environments, caches, and secrets are not. The face service downloads InsightFace `buffalo_l` weights on first startup, so cold starts can take time and an ephemeral instance may need to download them again after a restart. The free Render plan is for testing only: face inference may exceed its available memory or CPU, and its filesystem is ephemeral.
+
+The Blueprint selects `BLOCKCHAIN_BACKEND=fabric`. Provide a reachable external Fabric peer, set its endpoint and TLS host alias, and upload three Render secret files to the backend service named `peer-ca.pem`, `user-cert.pem`, and `user-key.pem`. The Render configuration points the backend at those file paths. The signing identity must be authorized by your Fabric network. For a temporary demo without Fabric, change `BLOCKCHAIN_BACKEND` to `local`; its file-backed ledger is lost when an ephemeral instance restarts or redeploys, so do not use that mode for real votes. Durable local-ledger storage requires a paid Render persistent disk and a configured `VOTES_LEDGER_PATH`.
+
+The root `.env` is for local development only. Never paste it into Render or commit it; enter each required value in the Render dashboard as a secret.
 
 ## API
 

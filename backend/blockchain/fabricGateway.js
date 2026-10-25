@@ -21,15 +21,20 @@ function newGateway() {
     mspId: required('FABRIC_MSP_ID'),
     credentials: fs.readFileSync(required('FABRIC_CERT_PATH'))
   };
-  const keyDirectory = required('FABRIC_KEY_DIR');
-  const keyFile = fs.readdirSync(keyDirectory).find(file => fs.statSync(path.join(keyDirectory, file)).isFile());
-  if (!keyFile) {
-    const error = new Error('Fabric signing identity has no private key file.');
-    error.code = 'FABRIC_CONFIGURATION_INVALID';
-    error.statusCode = 503;
-    throw error;
+  let privateKey;
+  if (process.env.FABRIC_KEY_PATH) {
+    privateKey = fs.readFileSync(process.env.FABRIC_KEY_PATH);
+  } else {
+    const keyDirectory = required('FABRIC_KEY_DIR');
+    const keyFile = fs.readdirSync(keyDirectory).find(file => fs.statSync(path.join(keyDirectory, file)).isFile());
+    if (!keyFile) {
+      const error = new Error('Fabric signing identity has no private key file.');
+      error.code = 'FABRIC_CONFIGURATION_INVALID';
+      error.statusCode = 503;
+      throw error;
+    }
+    privateKey = fs.readFileSync(path.join(keyDirectory, keyFile));
   }
-  const privateKey = fs.readFileSync(path.join(keyDirectory, keyFile));
   const client = new grpc.Client(required('FABRIC_PEER_ENDPOINT'), grpc.credentials.createSsl(tlsRootCert), {
     'grpc.ssl_target_name_override': required('FABRIC_PEER_HOST_ALIAS')
   });

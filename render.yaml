@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: mp5-backend
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DATABASE
+        value: VotingSystem
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: FACE_SERVICE_URL
+        sync: false
+      - key: FACE_SERVICE_API_KEY
+        sync: false
+      - key: FACE_ENCRYPTION_KEY
+        sync: false
+      - key: BLOCKCHAIN_BACKEND
+        value: fabric
+      - key: FABRIC_MSP_ID
+        value: Org1MSP
+      - key: FABRIC_CHANNEL
+        value: votingchannel
+      - key: FABRIC_CHAINCODE
+        value: voting-chaincode
+      - key: FABRIC_PEER_ENDPOINT
+        sync: false
+      - key: FABRIC_PEER_HOST_ALIAS
+        sync: false
+      - key: FABRIC_TLS_CERT_PATH
+        value: /etc/secrets/peer-ca.pem
+      - key: FABRIC_CERT_PATH
+        value: /etc/secrets/user-cert.pem
+      - key: FABRIC_KEY_PATH
+        value: /etc/secrets/user-key.pem
+
+  - type: web
+    name: mp5-face-service
+    runtime: python
+    plan: free
+    rootDir: face-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: FACE_SERVICE_API_KEY
+        sync: false
+      - key: FACE_REQUIRE_ANTISPOOF
+        value: "true"
+      - key: FACE_ANTISPOOF_MODEL_A_PATH
+        value: models/minifasnet_a.onnx
+      - key: FACE_ANTISPOOF_MODEL_B_PATH
+        value: models/minifasnet_b.onnx

@@ -1,8 +1,10 @@
 .env
 node_modules/
 face-service/.venv/
+face-service/.insightface/
 face-service/__pycache__/
 face-service/**/__pycache__/
-face-service/models/
+face-service/models/*
+!face-service/models/*.onnx
 *.py[cod]
 backend/data/test-votes.ndjson
