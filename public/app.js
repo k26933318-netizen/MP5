@@ -708,7 +708,7 @@ function legacyCameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel
 }
 
 function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSuccess, onBack, mode }) {
-  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position your face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" role="status" aria-live="polite">Start the camera to begin.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
+  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>Use a plain white, evenly lit background.</li><li>Keep only one face in the camera view.</li><li>Center your face inside the guide and hold still.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" role="status" aria-live="polite">Start the camera to begin. Use a plain white background and keep only one face in view.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
   const video = document.querySelector('#face-video');
   const canvas = document.querySelector('#face-canvas');
   const message = document.querySelector('#camera-message');
@@ -875,7 +875,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       } else {
         assessmentFrames.length = 0;
         actionButton.disabled = true;
-        message.textContent = result.message || 'Image conditions are not suitable. Please adjust your surroundings and try again.';
+        message.textContent = result.message || 'Use a plain white, evenly lit background and keep only one face in view.';
       }
     } catch (error) {
       readyCount = 0;

@@ -273,7 +273,7 @@ def assess_face(image: np.ndarray, bbox: np.ndarray, landmarks: np.ndarray, requ
     if background["failure_conditions"]:
         _reject(
             "IMAGE_CONDITIONS_UNSUITABLE",
-            "Adjust your surroundings and try again.",
+            "Use a plain white, evenly lit background and keep only one face in view.",
         )
     return {
         "center_x": center_x,

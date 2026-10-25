@@ -105,7 +105,7 @@ class FaceRecognitionRuntime:
             detail["face"] = face
             if detail.get("code") == "IMAGE_CONDITIONS_UNSUITABLE":
                 detail["message"] = (
-                    "Image conditions are not suitable. Please adjust your surroundings and try again."
+                    "Use a plain white, evenly lit background and keep only one face in view."
                 )
             raise
         return {
@@ -255,14 +255,15 @@ class FaceRecognitionRuntime:
 
 
 def create_runtime() -> FaceRecognitionRuntime:
-    from insightface.app import FaceAnalysis
+    from insightface import model_zoo
     import onnxruntime as ort
+    import tempfile
+    import zipfile
 
-    from app.models.face_detector import InsightFaceDetector
+    from app.models.face_detector import RetinaFaceDetector
     from app.models.face_recognizer import ArcFaceRecognizer
 
-    # Keep the existing model weights and embedding semantics while reducing
-    # the ONNX Runtime working set on small-memory hosts such as Render Free.
+    # Limit CPU threads and avoid the default memory arena on small hosts.
     session_options = ort.SessionOptions()
     session_options.intra_op_num_threads = 1
     session_options.inter_op_num_threads = 1
@@ -270,27 +271,41 @@ def create_runtime() -> FaceRecognitionRuntime:
     session_options.enable_cpu_mem_arena = False
     session_options.enable_mem_pattern = False
 
-    analysis = FaceAnalysis(
-        name=settings.insightface_model_name,
-        root=str(settings.insightface_model_root),
-        allowed_modules=["detection", "recognition"],
-        providers=["CPUExecutionProvider"],
-        sess_options=session_options,
+    if settings.insightface_model_name == "buffalo_sc":
+        model_directory = Path(tempfile.gettempdir()) / "voting-system-face-models" / "buffalo_sc"
+        arcface_path = model_directory / "w600k_mbf.onnx"
+        if not arcface_path.is_file():
+            expected_archive_hash = "da14772719ba896e12fec034ee12df63e70310a6fe91143e09ad54d10cbf143e"
+            archive = settings.arcface_model_archive_path
+            if not archive.is_file() or _model_hash(archive) != expected_archive_hash[:16]:
+                raise RuntimeError("The bundled buffalo_sc ArcFace archive is missing or failed its SHA-256 check.")
+            model_directory.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(archive) as model_archive:
+                source_name = "buffalo_sc/w600k_mbf.onnx"
+                if source_name not in model_archive.namelist():
+                    raise RuntimeError("The buffalo_sc ArcFace archive has unexpected contents.")
+                if not arcface_path.is_file():
+                    with model_archive.open(source_name) as source, arcface_path.open("wb") as target:
+                        target.write(source.read())
+    else:
+        model_directory = settings.insightface_model_root / "models" / settings.insightface_model_name
+        arcface_filename = "w600k_mbf.onnx" if settings.insightface_model_name == "buffalo_s" else "w600k_r50.onnx"
+        arcface_path = model_directory / arcface_filename
+    if not arcface_path.is_file():
+        raise RuntimeError(f"ArcFace recognition model is missing: {arcface_path}")
+    recognition_model = model_zoo.get_model(
+        str(arcface_path), providers=["CPUExecutionProvider"], sess_options=session_options
     )
-    analysis.prepare(
-        ctx_id=-1,
-        det_size=(settings.detection_size, settings.detection_size),
-        det_thresh=settings.min_detection_score,
-    )
-    detector = InsightFaceDetector(analysis.models.get("detection"))
-    recognizer = ArcFaceRecognizer(analysis.models.get("recognition"))
-    detector_path = Path(detector.model.model_file)
+    if recognition_model is None:
+        raise RuntimeError("The configured ArcFace recognition model could not be loaded.")
+    recognition_model.prepare(ctx_id=-1)
+    detector = RetinaFaceDetector(settings.retinaface_model_path, settings.min_detection_score)
+    recognizer = ArcFaceRecognizer(recognition_model)
     recognizer_path = Path(recognizer.model.model_file)
-    detector_hash = _model_hash(detector_path)
+    detector_hash = _model_hash(settings.retinaface_model_path)
     recognizer_hash = _model_hash(recognizer_path)
     version = (
-        f"InsightFace:{settings.insightface_model_name}"
-        f"+{type(detector.model).__name__}:{detector_hash}"
+        f"RetinaFace:MobileNet025:{detector_hash}"
         f"+{type(recognizer.model).__name__}:{recognizer_hash}"
     )
     return FaceRecognitionRuntime(detector, recognizer, version)

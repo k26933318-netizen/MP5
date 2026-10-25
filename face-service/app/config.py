@@ -21,6 +21,8 @@ def _load_project_env() -> None:
 class Settings:
     insightface_model_name: str
     insightface_model_root: Path
+    retinaface_model_path: Path
+    arcface_model_archive_path: Path
     detection_size: int
     min_detection_score: float
     service_api_key: str
@@ -73,8 +75,14 @@ def load_settings() -> Settings:
 
     project_root = Path(__file__).resolve().parents[2]
     return Settings(
-        insightface_model_name=os.getenv("INSIGHTFACE_MODEL_NAME", "buffalo_l"),
+        insightface_model_name=os.getenv("INSIGHTFACE_MODEL_NAME", "buffalo_sc"),
         insightface_model_root=Path(os.getenv("INSIGHTFACE_MODEL_ROOT", str(Path.home() / ".insightface"))).expanduser(),
+        retinaface_model_path=Path(os.getenv(
+            "RETINAFACE_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "models" / "retinaface-mnet025.onnx")
+        )).expanduser(),
+        arcface_model_archive_path=Path(os.getenv(
+            "ARCFACE_MODEL_ARCHIVE_PATH", str(Path(__file__).resolve().parents[1] / "models" / "buffalo_sc.zip")
+        )).expanduser(),
         detection_size=int(os.getenv("FACE_DETECTION_SIZE", "640")),
         min_detection_score=min_detection_score,
         service_api_key=os.getenv("FACE_SERVICE_API_KEY", ""),

@@ -1,4 +1,5 @@
 .env
+.atlas-transfer/
 node_modules/
 face-service/.venv/
 face-service/.insightface/
@@ -6,5 +7,6 @@ face-service/__pycache__/
 face-service/**/__pycache__/
 face-service/models/*
 !face-service/models/*.onnx
+!face-service/models/*.zip
 *.py[cod]
 backend/data/test-votes.ndjson

@@ -1,6 +1,6 @@
 # VoteLedger
 
-VoteLedger is an electronic-voting prototype with voter, administrator, election-officer, and candidate accounts. The local development profile uses MongoDB for application records and a local hash-linked vote ledger. Hyperledger Fabric is available when an operator supplies a running network, deployed chaincode, and valid identities. Voter face matching is performed by a separate Python service using the locally installed FRS2-compatible InsightFace SCRFD detector and ArcFace embeddings.
+VoteLedger is an electronic-voting prototype with voter, administrator, election-officer, and candidate accounts. The local development profile uses MongoDB for application records and a local hash-linked vote ledger. Hyperledger Fabric is available when an operator supplies a running network, deployed chaincode, and valid identities. Voter face matching is performed by a separate Python service using a RetinaFace MobileNet detector and ArcFace embeddings.
 
 > **Prototype only:** this project is not suitable for a real public election without independent security, biometric, privacy, accessibility, legal, and election-system validation. Face matching, active head-movement checks, and passive presentation-attack detection are separate probabilistic controls; none alone proves a person's legal identity or prevents every attack. The local hash-linked ledger is not equivalent to a distributed blockchain. Biometric data needs strong organizational, technical, and legal controls.
 
@@ -10,9 +10,9 @@ VoteLedger is an electronic-voting prototype with voter, administrator, election
 - Admin approval; role-based sign-in for voters, admins, election officers, and candidates.
 - Party, alliance, candidate, officer, and election administration.
 - Election lifecycle rules and voting-date validation.
-- Live camera feedback uses InsightFace bounding boxes to move a tracking box independently of the fixed positioning guide; server checks position, pose, image quality, and background suitability.
+- Live camera feedback uses RetinaFace bounding boxes to move a tracking box independently of the fixed positioning guide; server checks position, pose, image quality, and background suitability. The camera provides live instructions for a plain white background and one face only.
 - Recognition requires a backend-issued, randomized head-turn-and-return challenge, multiple ordered camera frames, and the two-model MiniFASNet passive presentation-attack check. Challenge use is bound to voter, election, browser session, expiration, and one-time consumption.
-- InsightFace SCRFD requires exactly one face and supplies five landmarks for ArcFace-compatible alignment.
+- RetinaFace requires exactly one face and supplies five landmarks for ArcFace-compatible alignment.
 - ArcFace produces a 512-dimensional embedding, L2-normalized before cosine-similarity comparison.
 - AES-256-GCM encrypted embedding storage in MongoDB; images and embeddings are not put in votes, receipts, or the ledger.
 - Short-lived verification authorization bound to voter, election, browser session, and enrollment version; stored as a hash and consumed once.
@@ -26,8 +26,8 @@ VoteLedger is an electronic-voting prototype with voter, administrator, election
 Browser camera
     -> Node.js / Express API
        -> Python FastAPI face service (internal service key)
-          -> InsightFace SCRFD detection and five-point landmarks
-          -> FRS2-cached ArcFace alignment, embedding and L2 normalization
+          -> RetinaFace MobileNet detection and five-point landmarks
+          -> InsightFace ArcFace alignment, embedding and L2 normalization
           -> background, positioning, multi-frame stability and quality checks
           -> randomized head-movement challenge and local MiniFASNet PAD models
        -> MongoDB (voters, encrypted face embeddings, elections,
@@ -35,12 +35,12 @@ Browser camera
        -> Local development ledger OR explicitly configured Hyperledger Fabric
 ```
 
-InsightFace `buffalo_l` recognition/detection weights are not included; the local profile reuses the cache installed by FRS2 at `INSIGHTFACE_MODEL_ROOT`. The two MiniFASNet ONNX anti-spoof models are expected under `FRS2/face-recognition-app/models` for local execution and are copied into `face-service/models` for deployment. Review licenses and provenance for all model files; the project code does not grant model rights. The training `.pth` files and InsightFace cache remain outside version control.
+The face service uses the 1.7 MB RetinaFace MobileNet-0.25 ONNX detector and the 13.6 MB InsightFace `buffalo_sc` ArcFace MobileFaceNet weights to reduce the model footprint for Render Free. The ArcFace archive is bundled and extracted at startup. Changing from the former `buffalo_l` pipeline changes the embedding model version, so previously enrolled voters must re-enroll. The two MiniFASNet ONNX anti-spoof models are expected under `FRS2/face-recognition-app/models` for local execution and are copied into `face-service/models` for deployment. Review licenses and provenance for all model files; the InsightFace pretrained weights are for non-commercial research use. The training `.pth` files and InsightFace cache remain outside version control.
 
 ### Face model contract
 
-- Detector: the FRS2-installed InsightFace **SCRFD** model that returns boxes and five landmarks.
-- Recognizer: the FRS2-installed InsightFace **ArcFace** model whose output is 512-dimensional.
+- Detector: the bundled RetinaFace MobileNet-0.25 ONNX model that returns boxes and five landmarks.
+- Recognizer: the InsightFace `buffalo_sc` **ArcFace MobileFaceNet** model whose output is 512-dimensional.
 - Alignment: InsightFace ArcFace five-point similarity transform to the model input size (typically 112×112), from BGR image pixels.
 - Quality checks: minimum image/face dimensions, detector confidence, landmark geometry, face position/size, roll/yaw proxy, blur, brightness, frame-to-frame stability, and near-white background sampling.
 - Background policy: the service estimates the person region from the detected face and samples surrounding pixels. It checks the near-white fraction and brightness uniformity; this is an application-specific policy, not a general face-recognition requirement. It is not semantic human segmentation, so camera framing and threshold calibration matter.
@@ -55,7 +55,7 @@ The service loads its face-recognition and anti-spoof models once at startup and
 - Node.js 20 or newer and npm.
 - MongoDB 7 or a compatible MongoDB deployment.
 - Python 3.11 or 3.12 for the pinned face-service dependencies.
-- The FRS2 `buffalo_l` cache under `INSIGHTFACE_MODEL_ROOT`, including `det_10g.onnx` and `w600k_r50.onnx`.
+- The configured ArcFace weights under `INSIGHTFACE_MODEL_ROOT` for local legacy profiles; the `buffalo_sc` profile uses the bundled, checksum-verified MobileFaceNet ArcFace archive.
 - The two MiniFASNet ONNX files (`minifasnet_a.onnx` and `minifasnet_b.onnx`) under `FRS2/face-recognition-app/models` for local execution; deploys use the copies under `face-service/models`.
 - A modern browser with camera access. Camera access requires HTTPS, except for localhost.
 
@@ -77,7 +77,7 @@ FACE_SERVICE_API_KEY=replace-with-a-long-random-secret
 FACE_ENCRYPTION_KEY=replace-with-a-generated-32-byte-key
 FACE_ENCRYPTION_KEY_VERSION=1
 FACE_SIMILARITY_THRESHOLD=0.50
-INSIGHTFACE_MODEL_NAME=buffalo_l
+INSIGHTFACE_MODEL_NAME=buffalo_sc
 INSIGHTFACE_MODEL_ROOT=C:\Users\YOUR_USERNAME\.insightface
 FACE_DETECTION_SIZE=640
 FACE_MIN_DETECTION_SCORE=0.70
@@ -103,7 +103,7 @@ FACE_ANTISPOOF_MIN_FRAME=0.50
 FACE_REQUIRE_ANTISPOOF=true
 ```
 
-The local model root must contain `models\buffalo_l` with its detector and recognition ONNX files. Docker Compose mounts this model root read-only at `/insightface`. The health endpoint reports database, face-service, and configured blockchain backend status without exposing secrets.
+The service extracts `buffalo_sc/w600k_mbf.onnx` from the checksum-verified archive bundled under `face-service/models/` into the system temporary directory. RetinaFace is loaded from the bundled `face-service/models/retinaface-mnet025.onnx`. Other configured model names use `INSIGHTFACE_MODEL_ROOT`. The health endpoint reports database, face-service, and configured blockchain backend status without exposing secrets.
 
 Background checks use OpenCV GrabCut foreground segmentation initialized with face landmarks' detection box, a head/hair estimate, and a shoulder/body prior; pixels marked uncertain foreground are excluded from the denominator. The configured threshold is applied to near-white pixels divided by valid estimated background pixels. `FACE_BACKGROUND_MIN_WHITE_FRACTION` defaults to 0.60 and can be configured from 0.50 to 0.75; `FACE_BACKGROUND_MIN_BRIGHTNESS` and `FACE_BACKGROUND_MAX_STDDEV` tune near-white classification and uniformity. `FACE_DIAGNOSTICS_ENABLED` writes structured validation diagnostics to the face-service development logs; keep it disabled for production. The mask is an estimate, not semantic segmentation, and still needs calibration on representative webcams. The server returns only generic user guidance and does not expose background scores or thresholds through the API.
 
@@ -165,7 +165,7 @@ The root `render.yaml` defines two native Render web services; Docker is not use
 
 In Render, create or update a Blueprint from this repository and review its environment variables before deploying. Because both services use the free plan, `FACE_SERVICE_URL` references the face service's public HTTPS URL. The face API requires `FACE_SERVICE_API_KEY`; set the same strong, random value on both services. Set `MONGODB_URI` to the Atlas driver URI on `mp5-backend`, grant its database user read/write access, and configure the Atlas IP access list for the backend's Render outbound IP ranges. Set `FACE_ENCRYPTION_KEY` to a separate random 32-byte key and provide a strong `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
 
-The two runtime MiniFASNet ONNX files are included under `face-service/models/`; training `.pth` files, virtual environments, caches, and secrets are not. The face service downloads InsightFace `buffalo_l` weights on first startup, so cold starts can take time and an ephemeral instance may need to download them again after a restart. The free Render plan is for testing only: face inference may exceed its available memory or CPU, and its filesystem is ephemeral.
+The two runtime MiniFASNet ONNX files, RetinaFace detector, and compact ArcFace archive are included under `face-service/models/`; training `.pth` files, virtual environments, caches, and secrets are not. Model extraction uses ephemeral storage on Render, so cold starts repeat it after an instance restarts. The free Render plan is for testing only: face inference may exceed its available CPU, and its filesystem is ephemeral.
 
 The Blueprint defaults to `BLOCKCHAIN_BACKEND=local` for testing. Its file-backed ledger is lost when a free instance restarts or redeploys, so do not use this mode for real votes. For Fabric, change the Blueprint to `BLOCKCHAIN_BACKEND=fabric`, provide a reachable peer, and configure the peer endpoint, TLS host alias, and secret certificate/key files. Durable local-ledger storage requires a paid Render persistent disk and a configured `VOTES_LEDGER_PATH`.
 
@@ -247,7 +247,7 @@ python -c "from app.services.detection_service import create_runtime; from app.s
 
 ## Limitations and remaining deployment work
 
-- SCRFD/ArcFace matching uses compatible ONNX models from the FRS2 cache. Model licensing and use limitations must be reviewed.
+- RetinaFace/ArcFace matching uses a compact ONNX model pair. InsightFace pretrained ArcFace weights are restricted to non-commercial research use; review licensing before production.
 - Thresholds and quality cutoffs are configurable engineering defaults; they require demographic and environmental validation for the selected model/camera.
 - Background validation combines GrabCut with detector bounds and a conservative head/shoulder prior; it is not a dedicated semantic person-segmentation model. Hair, clothing, scene composition, camera auto-exposure, and framing can influence results. Calibrate `FACE_BACKGROUND_MIN_WHITE_FRACTION` against intended webcams and lighting.
 - Active head-turn checks and MiniFASNet PAD scoring are independent, probabilistic signals. Neither guarantees resistance to high-quality replay, masks, deepfakes, or other presentation attacks. The included tests mock model outputs and do not establish biometric accuracy or security.

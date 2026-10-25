@@ -42,6 +42,10 @@ services:
         sync: false
       - key: FACE_DETECTION_SIZE
         value: "320"
+      - key: INSIGHTFACE_MODEL_NAME
+        value: buffalo_sc
+      - key: RETINAFACE_MODEL_PATH
+        value: models/retinaface-mnet025.onnx
       - key: OMP_NUM_THREADS
         value: "1"
       - key: OPENBLAS_NUM_THREADS
