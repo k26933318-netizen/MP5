@@ -102,6 +102,25 @@ class DetectionServiceTests(unittest.TestCase):
         self.assertTrue(result["ready"])
         self.assertEqual(result["faceCount"], 1)
 
+    def test_assessment_uses_secondary_detector_to_confirm_one_face(self):
+        boxes = np.repeat(self.box, 3, axis=0)
+        runtime = runtime_for(boxes, np.repeat(self.landmarks, 3, axis=0))
+
+        class SingleFaceConfirmation:
+            def detect(self, _image, max_num=0):
+                self.asserted_max_num = max_num
+                return np.array([[70, 50, 250, 270, 0.99]], dtype=np.float32), None
+
+        confirmation = SingleFaceConfirmation()
+        runtime.confirmation_detector = confirmation
+        with patch("app.utils.image_utils.validate_face_quality"), \
+                patch("app.services.detection_service.assess_face", return_value={}):
+            result = runtime.assess_position(self.image)
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["faceCount"], 1)
+        self.assertEqual(confirmation.asserted_max_num, 0)
+
     def test_rejects_small_face_as_low_quality(self):
         small_box = np.array([[10, 10, 40, 40, 0.99]], dtype=np.float32)
         runtime = runtime_for(small_box, self.landmarks)

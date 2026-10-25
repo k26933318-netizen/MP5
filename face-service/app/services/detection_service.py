@@ -34,6 +34,7 @@ class FaceRecognitionRuntime:
     detector: object
     recognizer: object
     model_version: str
+    confirmation_detector: object | None = None
 
     def _filter_invalid_candidates(
         self, image: np.ndarray, boxes: np.ndarray, landmarks: np.ndarray
@@ -41,6 +42,14 @@ class FaceRecognitionRuntime:
         """Drop detector false positives that fail basic face-image quality checks."""
         if len(boxes) <= 1:
             return boxes, landmarks
+
+        if self.confirmation_detector is not None:
+            confirmed_boxes, _ = self.confirmation_detector.detect(image, max_num=0)
+            if len(confirmed_boxes) == 1:
+                # Keep RetinaFace's box and landmarks for all later checks, while
+                # using the independent detector to resolve a false multi-face count.
+                best = int(np.argmax(boxes[:, 4]))
+                return boxes[[best]], landmarks[[best]]
 
         # RetinaFace can return a nested box for the same face (for example, a
         # second box around only the eyes). Suppress those before counting people.
@@ -348,19 +357,24 @@ def create_runtime() -> FaceRecognitionRuntime:
     if settings.insightface_model_name == "buffalo_sc":
         model_directory = Path(tempfile.gettempdir()) / "voting-system-face-models" / "buffalo_sc"
         arcface_path = model_directory / "w600k_mbf.onnx"
-        if not arcface_path.is_file():
+        confirmation_path = model_directory / "det_500m.onnx"
+        if not arcface_path.is_file() or not confirmation_path.is_file():
             expected_archive_hash = "da14772719ba896e12fec034ee12df63e70310a6fe91143e09ad54d10cbf143e"
             archive = settings.arcface_model_archive_path
             if not archive.is_file() or _model_hash(archive) != expected_archive_hash[:16]:
-                raise RuntimeError("The bundled buffalo_sc ArcFace archive is missing or failed its SHA-256 check.")
+                raise RuntimeError("The bundled buffalo_sc model archive is missing or failed its SHA-256 check.")
             model_directory.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(archive) as model_archive:
-                source_name = "buffalo_sc/w600k_mbf.onnx"
-                if source_name not in model_archive.namelist():
-                    raise RuntimeError("The buffalo_sc ArcFace archive has unexpected contents.")
-                if not arcface_path.is_file():
-                    with model_archive.open(source_name) as source, arcface_path.open("wb") as target:
-                        target.write(source.read())
+                archive_names = set(model_archive.namelist())
+                for source_name, target_path in (
+                    ("buffalo_sc/w600k_mbf.onnx", arcface_path),
+                    ("buffalo_sc/det_500m.onnx", confirmation_path),
+                ):
+                    if source_name not in archive_names:
+                        raise RuntimeError("The buffalo_sc model archive has unexpected contents.")
+                    if not target_path.is_file():
+                        with model_archive.open(source_name) as source, target_path.open("wb") as target:
+                            target.write(source.read())
     else:
         model_directory = settings.insightface_model_root / "models" / settings.insightface_model_name
         arcface_filename = "w600k_mbf.onnx" if settings.insightface_model_name == "buffalo_s" else "w600k_r50.onnx"
@@ -375,6 +389,14 @@ def create_runtime() -> FaceRecognitionRuntime:
     recognition_model.prepare(ctx_id=-1)
     detector = RetinaFaceDetector(settings.retinaface_model_path, settings.min_detection_score)
     recognizer = ArcFaceRecognizer(recognition_model)
+    confirmation_detector = None
+    if settings.insightface_model_name == "buffalo_sc":
+        confirmation_detector = model_zoo.get_model(
+            str(confirmation_path), providers=["CPUExecutionProvider"], sess_options=session_options
+        )
+        if confirmation_detector is None:
+            raise RuntimeError("The compact secondary face-count model could not be loaded.")
+        confirmation_detector.prepare(ctx_id=-1)
     recognizer_path = Path(recognizer.model.model_file)
     detector_hash = _model_hash(settings.retinaface_model_path)
     recognizer_hash = _model_hash(recognizer_path)
@@ -382,7 +404,7 @@ def create_runtime() -> FaceRecognitionRuntime:
         f"RetinaFace:MobileNet025:{detector_hash}"
         f"+{type(recognizer.model).__name__}:{recognizer_hash}"
     )
-    return FaceRecognitionRuntime(detector, recognizer, version)
+    return FaceRecognitionRuntime(detector, recognizer, version, confirmation_detector)
 
 
 def _model_hash(path: Path) -> str:
