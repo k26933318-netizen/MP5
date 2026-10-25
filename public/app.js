@@ -9,6 +9,7 @@ let faceAssessmentTimer;
 let faceChallengeTimer;
 let verificationToken = '';
 let ledgerMode = 'fabric';
+let faceVerificationEnabled = true;
 let resultsLoadSequence = 0;
 let resultsRefreshTimer;
 
@@ -73,8 +74,11 @@ async function start() {
   }
   const candidateData = await request(`/election/${election.electionId}/candidates`);
   candidates = candidateData.candidates;
-  const face = await request('/face/status');
-  if (!face.faceEnrollment.enrolled) faceEnrollment();
+  const [face, faceSetting] = await Promise.all([
+    request('/face/status'),
+    request('/face-verification/status').catch(() => ({ enabled: true }))
+  ]);
+  if (!face.faceEnrollment.enrolled && faceSetting.enabled !== false) faceEnrollment();
   else registration();
 }
 
@@ -317,13 +321,14 @@ async function adminDashboard() {
   const sidebar = document.querySelector('.sidebar');
   sidebar.classList.add('admin-sidebar');
   sidebar.innerHTML = '<div class="eyebrow">Administration</div><h1>Control<br><em>centre.</em></h1><p class="sidebar-copy">Manage elections, review results, and inspect recorded transactions.</p><nav class="admin-nav" aria-label="Admin sections"><a href="#overview">Overview</a><a href="#results" id="admin-results-link">Results &amp; records</a><a href="#parties">Parties and alliances</a><a href="#access">Officers and candidates</a><a href="#elections">Elections</a><a href="#security">Ledger security</a></nav>';
-  const [votersData, electionsData, partiesData, alliancesData, officersData, candidateAccountsData] = await Promise.all([
+  const [votersData, electionsData, partiesData, alliancesData, officersData, candidateAccountsData, faceVerificationData] = await Promise.all([
     request('/voters').catch(() => ({ voters: [] })),
     request('/elections').catch(() => ({ elections: [] })),
     request('/parties').catch(() => ({ parties: [] })),
     request('/alliances').catch(() => ({ alliances: [] })),
     request('/officers').catch(() => ({ officers: [] })),
-    request('/candidate-accounts').catch(() => ({ candidates: [] }))
+    request('/candidate-accounts').catch(() => ({ candidates: [] })),
+    request('/admin/settings/face-verification').catch(() => ({ enabled: true }))
   ]);
   const voters = votersData.voters || [];
   const elections = electionsData.elections || [];
@@ -335,6 +340,25 @@ async function adminDashboard() {
     ? { integrity: { status: 'Fabric peer ledger' } }
     : await request('/ledger/TN-ASSEMBLY-2026/integrity').catch(() => ({ integrity: { status: 'UNKNOWN', recordsChecked: 0, brokenLinks: 0, invalidHashes: 0, verifiedAt: new Date().toISOString() } }));
   view(`<div class="kicker">Admin console</div><h2>Election management</h2><p class="intro">Manage voter approvals, party and alliance records, election officers, and candidate accounts from one control panel.</p><div class="receipt"><div class="receipt-line"><span>Signed in as</span><strong>${currentUser.username}</strong></div><div class="receipt-line"><span>Permission</span><strong>Administrator</strong></div></div><h3>Security overview</h3><div class="receipt"><div class="receipt-line"><span>Total elections</span><strong>${elections.length}</strong></div><div class="receipt-line"><span>Approved voters</span><strong>${voters.filter(v => v.status === 'APPROVED').length}</strong></div><div class="receipt-line"><span>Registered parties</span><strong>${parties.length}</strong></div><div class="receipt-line"><span>Ledger status</span><strong>${integrity.integrity.status}</strong></div></div><h3>Party management</h3><form id="party-form" class="form-grid"><div class="field"><label>Party ID</label><input id="party-id" required placeholder="PARTY-001"></div><div class="field"><label>Party name</label><input id="party-name" required placeholder="Party name"></div><div class="field"><label>Party symbol</label><input id="party-symbol" placeholder="e.g. Lotus"></div><div class="field"><label>President name</label><input id="party-president" placeholder="President name"></div><div class="field"><label>Founded year</label><input id="party-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Add party</button></form><div class="admin-list">${parties.length ? parties.map(party => `<div class="admin-row"><span><strong>${party.partyName}</strong><small>${party.partyId}${party.partySymbol ? ` · ${party.partySymbol}` : ''}</small></span><span class="approved">${party.presidentName || 'Party'}</span></div>`).join('') : '<p class="intro">No parties added yet.</p>'}</div><h3>Alliance management</h3><form id="alliance-form" class="form-grid"><div class="field"><label>Alliance ID</label><input id="alliance-id" required placeholder="ALLIANCE-001"></div><div class="field"><label>Alliance name</label><input id="alliance-name" required placeholder="Alliance name"></div><div class="field"><label>Alliance symbol</label><input id="alliance-symbol" placeholder="Symbol"></div><div class="field"><label>Leader party</label><select id="leader-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Formed year</label><input id="alliance-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Create alliance</button></form><div class="admin-list">${alliances.length ? alliances.map(alliance => `<div class="admin-row"><span><strong>${alliance.allianceName}</strong><small>${alliance.allianceId} · ${alliance.leaderPartyId || 'No leader'}</small></span><span class="approved">${alliance.allianceSymbol || 'Alliance'}</span></div>`).join('') : '<p class="intro">No alliances created yet.</p>'}</div><h3>Election officer management</h3><form id="officer-form" class="form-grid"><div class="field"><label>Officer ID</label><input id="officer-id" required placeholder="OFF-001"></div><div class="field"><label>Name</label><input id="officer-name" required placeholder="Officer name"></div><div class="field"><label>Username</label><input id="officer-username" required placeholder="Officer username"></div><div class="field"><label>Email</label><input id="officer-email" type="email" placeholder="officer@voteledger.gov"></div><div class="field"><label>Contact number</label><input id="officer-phone" placeholder="Contact number"></div><div class="field"><label>Password</label><input id="officer-password" type="password" required placeholder="Secure password"></div><button class="button full">Add officer</button></form><div class="admin-list">${officers.length ? officers.map(officer => `<div class="admin-row"><span><strong>${officer.name}</strong><small>${officer.username} · ${officer.role || 'ELECTION_OFFICER'}</small></span><span class="approved">${officer.status || 'APPROVED'}</span></div>`).join('') : '<p class="intro">No officers added yet.</p>'}</div><h3>Candidate account management</h3><form id="candidate-form" class="form-grid"><div class="field"><label>Candidate ID</label><input id="candidate-id" required placeholder="CAND-001"></div><div class="field"><label>Candidate name</label><input id="candidate-name" required placeholder="Candidate full name"></div><div class="field"><label>Username</label><input id="candidate-username" required placeholder="Candidate username"></div><div class="field"><label>Email</label><input id="candidate-email" type="email" placeholder="candidate@example.com"></div><div class="field"><label>Phone</label><input id="candidate-phone" placeholder="Phone number"></div><div class="field"><label>Party</label><select id="candidate-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Election ID</label><input id="candidate-election-id" placeholder="TN-ASSEMBLY-2026"></div><div class="field"><label>Password</label><input id="candidate-password" type="password" required placeholder="Candidate password"></div><button class="button full">Add candidate account</button></form><div class="admin-list">${candidateAccounts.length ? candidateAccounts.map(candidate => `<div class="admin-row"><span><strong>${candidate.name || candidate.candidateName}</strong><small>${candidate.username} · ${candidate.partyName || 'Unassigned party'}</small></span><span class="approved">${candidate.status || 'APPROVED'}</span></div>`).join('') : '<p class="intro">No candidate accounts created yet.</p>'}</div><h3>Voter approvals</h3><div class="admin-list">${voters.length ? voters.map(voterItem => `<div class="admin-row"><span><strong>${voterItem.name}</strong><small>${voterItem.voterId} · ${voterItem.status}</small></span>${voterItem.status === 'APPROVED' ? '<span class="approved">Approved</span>' : `<button class="button small" data-approve="${voterItem.voterId}">Approve</button>`}</div>`).join('') : '<p class="intro">No voter registrations yet.</p>'}</div><h3>Create election</h3><form id="election-form" class="form-grid"><div class="field"><label>Election ID</label><input id="election-id" required placeholder="ELECTION2026"></div><div class="field"><label>Election name</label><input id="election-name" required placeholder="Election name"></div><div class="field"><label>Start date</label><input id="start-date" type="datetime-local" required></div><div class="field"><label>End date</label><input id="end-date" type="datetime-local" required></div><button class="button full">Create election</button></form><section id="admin-results" class="admin-results"><div class="results-heading"><div><h3>Election results &amp; records</h3><p>Vote totals and anonymized transaction records.</p></div><label for="results-election">Election</label><select id="results-election"></select></div><div id="results-error" class="notice error" role="alert" hidden></div><div id="results-content"><p class="intro">Select an election to load its recorded results.</p></div></section><button class="button secondary full" id="verify-ledger">VERIFY LEDGER</button><button class="button secondary full" id="admin-logout">Sign out</button>`);
+  const securityHeading = [...document.querySelectorAll('.view h3')].find(heading => heading.textContent === 'Security overview');
+  const faceEnabled = faceVerificationData.enabled !== false;
+  if (securityHeading?.nextElementSibling) {
+    securityHeading.nextElementSibling.insertAdjacentHTML('afterend', `<section class="receipt face-verification-setting"><div class="receipt-line"><span>Face verification for voting</span><strong id="face-verification-state">${faceEnabled ? 'ON' : 'OFF'}</strong></div><p class="intro">${faceEnabled ? 'Approved voters must pass face and liveness checks before voting.' : 'Approved voters can vote without face verification.'} Disabling this check is recorded in the audit log.</p><button type="button" class="button ${faceEnabled ? 'secondary' : ''}" id="toggle-face-verification">${faceEnabled ? 'Turn face verification off' : 'Turn face verification on'}</button></section>`);
+  }
+  const faceVerificationButton = document.querySelector('#toggle-face-verification');
+  faceVerificationButton?.addEventListener('click', async () => {
+    faceVerificationButton.disabled = true;
+    try {
+      await request('/admin/settings/face-verification', {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled: !faceEnabled })
+      });
+      await adminDashboard();
+    } catch (error) {
+      document.querySelector('#face-verification-state').textContent = `Update failed: ${error.message}`;
+      faceVerificationButton.disabled = false;
+    }
+  });
   setupPartyLogoControls(parties);
   const voterApprovalHeading = [...document.querySelectorAll('.view h3')].find(heading => heading.textContent === 'Voter approvals');
   if (voterApprovalHeading?.nextElementSibling) {
@@ -708,10 +732,14 @@ function legacyCameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel
 }
 
 function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSuccess, onBack, mode }) {
-  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>Use a plain white, evenly lit background.</li><li>Keep only one face in the camera view.</li><li>Center your face inside the guide and hold still.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" role="status" aria-live="polite">Start the camera to begin. Use a plain white background and keep only one face in view.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
+  view(`<div class="kicker">Face check</div><h2>${title}</h2><p class="intro">${intro}</p><div class="face-camera-tips" role="note"><strong>Before you start</strong><ul><li>Use a plain white, evenly lit background.</li><li>Keep only one face in the camera view.</li><li>Center your face inside the guide and hold still.</li></ul></div><div class="camera"><video id="face-video" autoplay playsinline muted hidden></video><canvas id="face-canvas" hidden></canvas><div class="face-guide" id="face-guide" data-state="red" aria-hidden="true"></div><div class="face-tracking-box" id="face-tracking-box" data-state="red" aria-hidden="true" hidden></div><span id="camera-placeholder">Position one face clearly inside the frame.</span></div><p id="camera-message" class="camera-message" data-state="neutral" role="status" aria-live="polite">Start the camera to receive live positioning instructions.</p><div id="challenge-prompt" class="challenge-prompt" role="status" aria-live="polite" hidden></div><p id="challenge-countdown" class="challenge-countdown" aria-live="polite"></p><div class="camera-controls"><button class="button secondary" id="camera-start" type="button">Start camera</button><button class="button" id="camera-action" type="button" hidden disabled>${actionLabel}</button><button class="button secondary" id="camera-retry" type="button" hidden>Start a new liveness check</button></div><button class="button secondary full" id="camera-back" type="button">Go back</button>`);
   const video = document.querySelector('#face-video');
   const canvas = document.querySelector('#face-canvas');
   const message = document.querySelector('#camera-message');
+  const setCameraMessage = (text, state = 'neutral') => {
+    message.textContent = text;
+    message.dataset.state = state;
+  };
   const guide = document.querySelector('#face-guide');
   const trackingBox = document.querySelector('#face-tracking-box');
   const prompt = document.querySelector('#challenge-prompt');
@@ -823,9 +851,9 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
   function showCameraError(error) {
     loseTracking();
     guide.dataset.state = 'red';
-    message.textContent = error.name === 'NotAllowedError'
+    setCameraMessage(error.name === 'NotAllowedError'
       ? 'Camera permission was denied. Allow camera access and try again.'
-      : error.message || 'Camera is unavailable. Check the camera and try again.';
+      : error.message || 'Camera is unavailable. Check the camera and try again.', 'red');
   }
 
   async function assessCurrentFrame() {
@@ -860,22 +888,22 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
         assessmentFrames.push(blob);
         while (assessmentFrames.length > requiredStableFrames) assessmentFrames.shift();
         if (readyCount >= requiredStableFrames) {
-          message.textContent = currentStage === 'return'
+          setCameraMessage(currentStage === 'return'
             ? 'Face centered again. Capture the return-to-center frames.'
-            : 'Your face is ready. Hold still.';
+            : 'Your face is ready. Hold still.', 'green');
           actionButton.disabled = false;
           actionButton.textContent = currentStage === 'return'
             ? 'Capture return frames'
             : mode === 'verify' ? 'Start liveness challenge' : actionLabel;
         } else {
-          message.textContent = result.message || 'Hold still while position stabilizes.';
+          setCameraMessage(result.message || 'Hold still while position stabilizes.', 'yellow');
           actionButton.disabled = true;
           if (mode === 'verify' && currentStage === 'position') actionButton.textContent = 'Stabilizing face position';
         }
       } else {
         assessmentFrames.length = 0;
         actionButton.disabled = true;
-        message.textContent = result.message || 'Use a plain white, evenly lit background and keep only one face in view.';
+        setCameraMessage(result.message || 'Use a plain white background and keep only one face in view.', result.state === 'yellow' ? 'yellow' : 'red');
       }
     } catch (error) {
       readyCount = 0;
@@ -904,7 +932,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     clearInterval(faceChallengeTimer);
     faceChallengeTimer = null;
     actionButton.disabled = true;
-    message.textContent = 'The server is checking image quality, identity, and liveness.';
+    setCameraMessage('The server is checking image quality, identity, and liveness.');
     const form = new FormData();
     frames.forEach((frame, index) => form.append('images', frame, `face-${index + 1}.jpg`));
     for (const [name, value] of Object.entries(fields)) form.append(name, value);
@@ -936,7 +964,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       retryButton.hidden = false;
       actionButton.hidden = false;
       actionButton.disabled = true;
-      message.textContent = error.message;
+      setCameraMessage(error.message, 'red');
       readyCount = 0;
       assessmentFrames.length = 0;
     } finally {
@@ -946,7 +974,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
 
   async function startChallenge() {
     actionButton.disabled = true;
-    message.textContent = 'Preparing a server-issued liveness challenge...';
+    setCameraMessage('Preparing a server-issued liveness challenge...');
     try {
       const response = await fetch('/api/blockchain/face/challenge', {
         method: 'POST',
@@ -964,7 +992,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       currentStage = 'turn';
       prompt.hidden = false;
       prompt.textContent = `Step 1 of 2: ${result.action === 'turn_left' ? 'Turn your head toward your left shoulder.' : 'Turn your head toward your right shoulder.'}`;
-      message.textContent = 'Keep your face inside the guide while turning.';
+      setCameraMessage('Keep your face inside the guide while turning.', 'yellow');
       actionButton.textContent = 'Capture head movement';
       actionButton.disabled = false;
       faceChallengeTimer = setInterval(() => {
@@ -1009,7 +1037,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       startButton.hidden = true;
       actionButton.hidden = false;
       actionButton.textContent = mode === 'verify' ? 'Stabilizing face position' : actionLabel;
-      message.textContent = 'Center your face in the guide and hold still.';
+      setCameraMessage('Center your face in the guide and hold still.', 'yellow');
       faceAssessmentTimer = setInterval(() => assessCurrentFrame(), 450);
       await assessCurrentFrame();
     } catch (error) {
@@ -1030,7 +1058,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
       const frames = assessmentFrames.slice(-requiredStableFrames);
       if (frames.length !== requiredStableFrames || readyCount < requiredStableFrames) {
         actionButton.disabled = true;
-        message.textContent = 'Wait until the face guide is green and stable.';
+        setCameraMessage('Wait until the face guide is green and stable.', 'yellow');
         return;
       }
       await submitFrames(frames);
@@ -1042,14 +1070,14 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     }
     if (currentStage === 'turn') {
       actionButton.disabled = true;
-      message.textContent = 'Capturing the requested movement. Follow the instruction now.';
+      setCameraMessage('Capturing the requested movement. Follow the instruction now.', 'yellow');
       try {
         turnFrames = await captureBurst(challenge.framesPerStage);
         currentStage = 'return';
         readyCount = 0;
         assessmentFrames.length = 0;
         prompt.textContent = 'Step 2 of 2: Return your face to the center and hold still.';
-        message.textContent = 'Return to the center. Wait for the guide to turn green.';
+        setCameraMessage('Return to the center. Wait for the guide to turn green.', 'yellow');
       } catch (error) {
         expireChallenge();
         showCameraError(error);
@@ -1081,7 +1109,7 @@ function cameraWorkflow({ title, intro, endpoint, fields = {}, actionLabel, onSu
     actionButton.hidden = false;
     actionButton.disabled = true;
     actionButton.textContent = 'Start liveness challenge';
-    message.textContent = 'Center your face and hold still.';
+    setCameraMessage('Center your face and hold still.', 'yellow');
   };
 }
 
@@ -1098,13 +1126,27 @@ function faceEnrollment() {
 }
 
 function registration() {
-  view(`<div class="kicker">Voter access</div><h2>Welcome, ${currentUser.name}</h2><p class="intro">Choose a candidate on the ballot. Before your vote is submitted, we’ll ask you to confirm your identity with a face check.</p><button class="button full" id="continue-verification">Continue to ballot</button><div class="meta-row"><span>Not you?</span><span class="inline-link" id="logout-link">Sign out</span></div>`);
+  view(`<div class="kicker">Voter access</div><h2>Welcome, ${currentUser.name}</h2><p class="intro">Choose a candidate on the ballot. Face verification will follow the current administrator setting.</p><button class="button full" id="continue-verification">Continue to ballot</button><div class="meta-row"><span>Not you?</span><span class="inline-link" id="logout-link">Sign out</span></div>`);
   document.querySelector('#continue-verification').onclick = () => { voter = currentUser.voterId; ballot(); };
   document.querySelector('#logout-link').onclick = logout;
 }
 
-function ballot() {
-  view(`<div class="ballot-head"><div><div class="kicker">Your ballot</div><h2>${election.electionName}</h2></div><span class="election-tag">OPEN</span></div><p class="intro">Select one candidate. You’ll confirm your choice and complete a face check before your vote is submitted.</p><form id="ballot" class="candidates">${candidates.map(candidate => `<label class="candidate"><input type="radio" name="candidate" value="${candidate.candidateId}" required><span><strong>${candidate.candidateName}</strong><small>${candidate.party}</small></span></label>`).join('')}<button class="button full">Review your choice</button></form><div class="notice"><strong>Please choose carefully.</strong><br>You can submit only one vote in this election.</div>`);
+async function refreshFaceVerificationSetting() {
+  try {
+    const setting = await request('/face-verification/status');
+    faceVerificationEnabled = setting.enabled !== false;
+  } catch {
+    faceVerificationEnabled = true;
+  }
+  return faceVerificationEnabled;
+}
+
+async function ballot() {
+  await refreshFaceVerificationSetting();
+  const faceMessage = faceVerificationEnabled
+    ? 'You’ll confirm your choice and complete a face check before your vote is submitted.'
+    : 'Face verification is turned off by an administrator for voting right now.';
+  view(`<div class="ballot-head"><div><div class="kicker">Your ballot</div><h2>${election.electionName}</h2></div><span class="election-tag">OPEN</span></div><p class="intro">Select one candidate. ${faceMessage}</p><form id="ballot" class="candidates">${candidates.map(candidate => `<label class="candidate"><input type="radio" name="candidate" value="${candidate.candidateId}" required><span><strong>${candidate.candidateName}</strong><small>${candidate.party}</small></span></label>`).join('')}<button class="button full">Review your choice</button></form><div class="notice"><strong>Please choose carefully.</strong><br>You can submit only one vote in this election.</div>`);
   document.querySelectorAll('.candidate').forEach((label, index) => {
     const candidate = candidates[index];
     label.insertBefore(
@@ -1115,11 +1157,38 @@ function ballot() {
   document.querySelector('#ballot').onsubmit = event => { event.preventDefault(); confirmation(document.querySelector('input[name="candidate"]:checked').value); };
 }
 
-function confirmation(candidateId) {
+async function confirmation(candidateId) {
+  await refreshFaceVerificationSetting();
   const candidate = candidates.find(item => item.candidateId === candidateId);
-  view(`<div class="kicker">Confirm your choice</div><h2>Ready to submit your vote?</h2><p class="intro">Check your selection below. You’ll need to pass a face check before it is submitted.</p><div class="receipt"><div class="receipt-line"><span>Election</span><strong>${election.electionName}</strong></div><div class="receipt-line"><span>Your choice</span><strong>${candidate.candidateName}</strong></div></div><button class="button full" id="verify-and-submit">Confirm and continue</button><div class="meta-row"><span>Want to change it?</span><span class="inline-link" id="back">Return to ballot</span></div>`);
+  const confirmationMessage = faceVerificationEnabled
+    ? 'Check your selection below. You’ll need to pass a face check before it is submitted.'
+    : 'Face verification is disabled by an administrator. Your approved account can submit this vote without a face check.';
+  view(`<div class="kicker">Confirm your choice</div><h2>Ready to submit your vote?</h2><p class="intro">${confirmationMessage}</p><div class="receipt"><div class="receipt-line"><span>Election</span><strong>${election.electionName}</strong></div><div class="receipt-line"><span>Your choice</span><strong>${candidate.candidateName}</strong></div></div><button class="button full" id="verify-and-submit">${faceVerificationEnabled ? 'Confirm and continue' : 'Confirm and submit vote'}</button><div class="meta-row"><span>Want to change it?</span><span class="inline-link" id="back">Return to ballot</span></div>`);
   document.querySelector('#back').onclick = ballot;
-  document.querySelector('#verify-and-submit').onclick = () => {
+  const submitVote = async token => {
+    const submitButton = document.querySelector('#verify-and-submit');
+    submitButton.disabled = true;
+    try {
+      const data = await request('/vote', {
+        method: 'POST',
+        body: JSON.stringify({
+          electionId: election.electionId,
+          candidateId,
+          ...(token ? { verificationToken: token } : {})
+        })
+      });
+      verificationToken = '';
+      receipt(data.vote || data);
+    } catch (error) {
+      verificationToken = '';
+      view(`<div class="kicker">Vote not submitted</div><h2>We could not record this vote.</h2><div class="notice error">${error.message}</div><button class="button" onclick="ballot()">Return to ballot</button>`);
+    }
+  };
+  document.querySelector('#verify-and-submit').onclick = async () => {
+    if (!await refreshFaceVerificationSetting()) {
+      await submitVote('');
+      return;
+    }
     verificationToken = '';
     cameraWorkflow({
       title: 'Verify your face',
@@ -1131,21 +1200,7 @@ function confirmation(candidateId) {
       onBack: ballot,
       onSuccess: async result => {
         verificationToken = result.verificationToken;
-        try {
-          const data = await request('/vote', {
-            method: 'POST',
-            body: JSON.stringify({
-              electionId: election.electionId,
-              candidateId,
-              verificationToken
-            })
-          });
-          verificationToken = '';
-          receipt(data.vote || data);
-        } catch (error) {
-          verificationToken = '';
-          view(`<div class="kicker">Vote not submitted</div><h2>We could not record this vote.</h2><div class="notice error">${error.message}</div><button class="button" onclick="ballot()">Return to ballot</button>`);
-        }
+        await submitVote(verificationToken);
       }
     });
   };

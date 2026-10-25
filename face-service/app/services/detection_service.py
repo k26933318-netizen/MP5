@@ -66,26 +66,43 @@ class FaceRecognitionRuntime:
         boxes, landmarks = self.detector.detect(image)
         if len(boxes) == 0:
             _log_face_failure(False, 0, None, "face_not_detected")
-            raise HTTPException(status_code=422, detail={
-                "code": "NO_FACE",
-                "message": "No face detected. Move your face into the guide.",
+            return {
+                "ready": False,
                 "state": "red",
-            })
+                "face": None,
+                "faceCount": 0,
+                "message": "No face detected. Move your face into the guide.",
+            }
         if len(boxes) != 1:
             _log_face_failure(True, len(boxes), [float(value) for value in boxes[0][:4]], "multiple_faces_detected")
-            raise HTTPException(status_code=422, detail={
-                "code": "MULTIPLE_FACES",
-                "message": "Only one face should be in view.",
+            selected = int(np.argmax(boxes[:, 4]))
+            box = boxes[selected]
+            face = {
+                "bbox": [float(value) for value in box[:4]],
+                "frameWidth": int(image.shape[1]),
+                "frameHeight": int(image.shape[0]),
+            }
+            return {
+                "ready": False,
                 "state": "red",
-            })
+                "face": face,
+                "faceCount": len(boxes),
+                "message": f"Detected {len(boxes)} faces. Use a plain white background and keep only one face in view.",
+            }
         box, points = boxes[0], landmarks[0]
         if float(box[4]) < settings.min_detection_score:
             _log_face_failure(True, 1, [float(value) for value in box[:4]], "low_detector_confidence")
-            raise HTTPException(status_code=422, detail={
-                "code": "LOW_CONFIDENCE",
-                "message": "Face could not be detected clearly. Try again.",
+            return {
+                "ready": False,
                 "state": "red",
-            })
+                "face": {
+                    "bbox": [float(value) for value in box[:4]],
+                    "frameWidth": int(image.shape[1]),
+                    "frameHeight": int(image.shape[0]),
+                },
+                "faceCount": 1,
+                "message": "Face detected. Move closer and keep it steady in the guide.",
+            }
         face = {
             "bbox": [float(value) for value in box[:4]],
             "frameWidth": int(image.shape[1]),
@@ -103,6 +120,7 @@ class FaceRecognitionRuntime:
                 str(detail.get("code", "face_validation_failed")).lower(),
             )
             detail["face"] = face
+            detail["faceCount"] = 1
             if detail.get("code") == "IMAGE_CONDITIONS_UNSUITABLE":
                 detail["message"] = (
                     "Use a plain white, evenly lit background and keep only one face in view."
@@ -113,6 +131,7 @@ class FaceRecognitionRuntime:
             "state": "yellow",
             "message": "Hold still while your face position is checked.",
             "face": face,
+            "faceCount": 1,
         }
 
     def analyze_frames(self, images: list[np.ndarray], mode: str, action: str | None = None) -> dict:

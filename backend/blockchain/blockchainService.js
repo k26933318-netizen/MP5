@@ -174,36 +174,50 @@ class BlockchainService {
     await this.syncElection(input.electionId);
     const candidate = await this.repository.getCandidate(input.candidateId, input.electionId);
     if (!candidate) throw new Error('Candidate does not belong to election');
-    const enrollment = await this.repository.getFaceEnrollment(input.voterId);
-    if (!enrollment) {
-      const error = new Error('Face enrollment is required before voting');
-      error.code = 'FACE_NOT_ENROLLED';
-      error.statusCode = 403;
-      throw error;
-    }
-    const enrollmentUpdatedAt = enrollment.updatedAt instanceof Date
-      ? enrollment.updatedAt
-      : new Date(enrollment.updatedAt);
-    const authorization = await this.repository.consumeFaceVerification({
-      tokenHash: crypto.createHash('sha256').update(input.verificationToken || '').digest('hex'),
-      voterId: input.voterId,
-      electionId: input.electionId,
-      sessionHash: input.sessionHash,
-      enrollmentUpdatedAt
-    });
-    if (!authorization.valid) {
-      await this.repository.logAudit('INVALID_VERIFICATION_TOKEN', {
+    const securitySettings = typeof this.repository.getVotingSettings === 'function'
+      ? await this.repository.getVotingSettings()
+      : { faceVerificationEnabled: true };
+    if (securitySettings.faceVerificationEnabled) {
+      const enrollment = await this.repository.getFaceEnrollment(input.voterId);
+      if (!enrollment) {
+        const error = new Error('Face enrollment is required before voting');
+        error.code = 'FACE_NOT_ENROLLED';
+        error.statusCode = 403;
+        throw error;
+      }
+      const enrollmentUpdatedAt = enrollment.updatedAt instanceof Date
+        ? enrollment.updatedAt
+        : new Date(enrollment.updatedAt);
+      const authorization = await this.repository.consumeFaceVerification({
+        tokenHash: crypto.createHash('sha256').update(input.verificationToken || '').digest('hex'),
+        voterId: input.voterId,
+        electionId: input.electionId,
+        sessionHash: input.sessionHash,
+        enrollmentUpdatedAt
+      });
+      if (!authorization.valid) {
+        await this.repository.logAudit('INVALID_VERIFICATION_TOKEN', {
+          actorId: input.voterId,
+          actorRole: 'VOTER',
+          resourceType: 'ELECTION',
+          resourceId: input.electionId,
+          status: 'FAILURE',
+          description: authorization.code
+        });
+        const error = new Error('Face verification authorization is invalid or expired');
+        error.code = authorization.code;
+        error.statusCode = 403;
+        throw error;
+      }
+    } else {
+      await this.repository.logAudit('FACE_VERIFICATION_BYPASSED_BY_ADMIN_SETTING', {
         actorId: input.voterId,
         actorRole: 'VOTER',
         resourceType: 'ELECTION',
         resourceId: input.electionId,
-        status: 'FAILURE',
-        description: authorization.code
+        status: 'SUCCESS',
+        description: 'Face verification was disabled by an administrator for voting.'
       });
-      const error = new Error('Face verification authorization is invalid or expired');
-      error.code = authorization.code;
-      error.statusCode = 403;
-      throw error;
     }
     const voterHash = crypto.createHash('sha256')
       .update(`${input.electionId}:${String(input.voterId).trim().toLowerCase()}`)

@@ -611,6 +611,24 @@ async function releaseVoteClaim(electionId, voterHash) {
   });
 }
 
+async function getVotingSettings() {
+  const setting = await (await db()).collection('systemSettings').findOne({ _id: 'voting' });
+  return {
+    faceVerificationEnabled: setting?.faceVerificationEnabled !== false,
+    updatedAt: setting?.updatedAt || null,
+    updatedBy: setting?.updatedBy || null
+  };
+}
+
+async function setFaceVerificationEnabled(enabled, updatedBy) {
+  await (await db()).collection('systemSettings').updateOne(
+    { _id: 'voting' },
+    { $set: { faceVerificationEnabled: enabled, updatedAt: new Date(), updatedBy } },
+    { upsert: true }
+  );
+  return getVotingSettings();
+}
+
 async function healthCheck() {
   await (await db()).command({ ping: 1 });
   return 'ok';
@@ -681,6 +699,8 @@ module.exports = {
   createVoteClaim,
   completeVoteClaim,
   releaseVoteClaim,
+  getVotingSettings,
+  setFaceVerificationEnabled,
   logAudit,
   validateElectionStateTransition,
   healthCheck,

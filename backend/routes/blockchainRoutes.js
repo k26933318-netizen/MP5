@@ -80,6 +80,9 @@ router.post('/face/assess', faceAssessmentLimiter, faceUpload.single('image'), c
 router.post('/face/enroll', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.enrollFace);
 router.post('/face/challenge', auth.requireRole('voter'), faceLimiter, controller.createFaceChallenge);
 router.post('/face/verify', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.verifyFace);
+router.get('/face-verification/status', auth.requireRole('voter'), controller.getFaceVerificationSetting);
+router.get('/admin/settings/face-verification', auth.requireRole('admin'), controller.getFaceVerificationSetting);
+router.patch('/admin/settings/face-verification', auth.requireRole('admin'), controller.updateFaceVerificationSetting);
 router.post('/elections', auth.requireRole('admin'), controller.registerElection);
 router.patch('/elections/:electionId', auth.requireRole('admin'), controller.updateElection);
 router.get('/elections', auth.requireAuth, controller.listElections);

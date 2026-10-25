@@ -202,6 +202,7 @@ async def assess_position(
             "state": detail.get("state", "red"),
             "message": detail.get("message", "Please reposition and try again."),
             **({"face": detail["face"]} if "face" in detail else {}),
+            **({"faceCount": detail["faceCount"]} if "faceCount" in detail else {}),
         })
 
 

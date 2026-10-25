@@ -161,6 +161,7 @@ module.exports = {
       ready: result.ready === true,
       state: ['red', 'yellow'].includes(result.state) ? result.state : 'red',
       face: result.face || null,
+      faceCount: Number.isInteger(result.faceCount) ? result.faceCount : result.face ? 1 : 0,
       message: result.message || (result.ready ? 'Hold still while your face position is checked.' : 'Adjust your position and try again.')
     });
   }),
@@ -465,11 +466,32 @@ module.exports = {
   listAlliances: asyncRoute(async (_request, response) => response.json({ success: true, alliances: await mongo.listAlliances() })),
   registerElectionOfficer: send(['officerId', 'name', 'username', 'password'], input => mongo.registerElectionOfficer(input)),
   listElectionOfficers: asyncRoute(async (_request, response) => response.json({ success: true, officers: await mongo.listElectionOfficers() })),
+  getFaceVerificationSetting: asyncRoute(async (_request, response) => {
+    const settings = await mongo.getVotingSettings();
+    return response.json({ success: true, enabled: settings.faceVerificationEnabled });
+  }),
+  updateFaceVerificationSetting: asyncRoute(async (request, response) => {
+    if (typeof request.body?.enabled !== 'boolean') {
+      const error = new Error('The enabled value must be true or false.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const settings = await mongo.setFaceVerificationEnabled(request.body.enabled, request.user.username);
+    await mongo.logAudit('FACE_VERIFICATION_SETTING_UPDATED', {
+      actorId: request.user.username,
+      actorRole: 'ADMIN',
+      resourceType: 'SYSTEM_SETTING',
+      resourceId: 'voting',
+      status: 'SUCCESS',
+      description: `Face verification ${settings.faceVerificationEnabled ? 'enabled' : 'disabled'} for voting.`
+    });
+    return response.json({ success: true, enabled: settings.faceVerificationEnabled });
+  }),
   registerCandidateAccount: send(['candidateId', 'name', 'username', 'password', 'partyId'], input => mongo.registerCandidateAccount(input)),
   listCandidateAccounts: asyncRoute(async (_request, response) => response.json({ success: true, candidates: await mongo.listCandidateAccounts() })),
   castVote: asyncRoute(async (request, response) => {
     const input = body(request);
-    validate(input, ['electionId', 'candidateId', 'verificationToken']);
+    validate(input, ['electionId', 'candidateId']);
     const vote = await service.castVote({
       electionId: input.electionId,
       candidateId: input.candidateId,

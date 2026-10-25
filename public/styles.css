@@ -172,3 +172,8 @@ body { background:#f2f5fa; }
 .face-camera-tips strong { display:block; margin-bottom:5px; color:#242b40; }
 .face-camera-tips ul { margin:0; padding-left:19px; }
 .face-camera-tips li+li { margin-top:2px; }
+.camera-message { color:#596579; }
+.camera-message[data-state="red"] { color:#a32b2b; }
+.camera-message[data-state="yellow"] { color:#8b6500; }
+.camera-message[data-state="green"] { color:#147a56; }
+.face-verification-setting .intro { margin:10px 0 14px; }
