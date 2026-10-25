@@ -51,9 +51,36 @@ class DetectionServiceTests(unittest.TestCase):
 
     def test_rejects_multiple_faces(self):
         runtime = runtime_for(np.repeat(self.box, 2, axis=0), np.repeat(self.landmarks, 2, axis=0))
-        with self.assertRaises(HTTPException) as raised:
-            runtime.detect_faces(self.image)
+        with patch("app.utils.image_utils.validate_face_quality"):
+            with self.assertRaises(HTTPException) as raised:
+                runtime.detect_faces(self.image)
         self.assertEqual(raised.exception.detail["code"], "MULTIPLE_FACES")
+
+    def test_assessment_ignores_invalid_false_positive_boxes(self):
+        boxes = np.vstack((
+            self.box,
+            np.array([[10, 10, 45, 45, 0.82], [20, 20, 55, 60, 0.78]], dtype=np.float32),
+        ))
+        landmarks = np.repeat(self.landmarks, 3, axis=0)
+
+        def validate_candidate(_image, box, _points):
+            if box[2] - box[0] < 80:
+                raise HTTPException(status_code=422, detail={"code": "LOW_IMAGE_QUALITY"})
+
+        runtime = runtime_for(boxes, landmarks)
+        with patch("app.utils.image_utils.validate_face_quality", side_effect=validate_candidate), \
+                patch("app.services.detection_service.assess_face", return_value={}):
+            result = runtime.assess_position(self.image)
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["faceCount"], 1)
+
+    def test_assessment_still_rejects_two_plausible_faces(self):
+        runtime = runtime_for(np.repeat(self.box, 2, axis=0), np.repeat(self.landmarks, 2, axis=0))
+        with patch("app.utils.image_utils.validate_face_quality"):
+            result = runtime.assess_position(self.image)
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["faceCount"], 2)
 
     def test_rejects_small_face_as_low_quality(self):
         small_box = np.array([[10, 10, 40, 40, 0.99]], dtype=np.float32)

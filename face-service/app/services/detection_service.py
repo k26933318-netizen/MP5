@@ -35,8 +35,30 @@ class FaceRecognitionRuntime:
     recognizer: object
     model_version: str
 
+    def _filter_invalid_candidates(
+        self, image: np.ndarray, boxes: np.ndarray, landmarks: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Drop detector false positives that fail basic face-image quality checks."""
+        if len(boxes) <= 1:
+            return boxes, landmarks
+
+        plausible = []
+        for index, (box, points) in enumerate(zip(boxes, landmarks)):
+            try:
+                self._validate_face(image, box, points)
+            except HTTPException:
+                continue
+            plausible.append(index)
+
+        if len(plausible) == 0:
+            # Keep the strongest candidate so the normal quality checks can give
+            # the voter a useful instruction instead of reporting multiple faces.
+            plausible = [int(np.argmax(boxes[:, 4]))]
+        return boxes[plausible], landmarks[plausible]
+
     def detect_faces(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         boxes, landmarks = self.detector.detect(image)
+        boxes, landmarks = self._filter_invalid_candidates(image, boxes, landmarks)
         count = len(boxes)
         if count == 0:
             raise HTTPException(status_code=422, detail={
@@ -64,6 +86,7 @@ class FaceRecognitionRuntime:
 
     def assess_position(self, image: np.ndarray, require_frontal: bool = True) -> dict:
         boxes, landmarks = self.detector.detect(image)
+        boxes, landmarks = self._filter_invalid_candidates(image, boxes, landmarks)
         if len(boxes) == 0:
             _log_face_failure(False, 0, None, "face_not_detected")
             return {
@@ -215,6 +238,7 @@ class FaceRecognitionRuntime:
 
     def _analyze_frame(self, image: np.ndarray, require_frontal: bool) -> dict:
         boxes, landmarks = self.detector.detect(image)
+        boxes, landmarks = self._filter_invalid_candidates(image, boxes, landmarks)
         if len(boxes) == 0:
             _log_face_failure(False, 0, None, "face_not_detected")
             raise HTTPException(status_code=422, detail={
