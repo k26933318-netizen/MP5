@@ -184,7 +184,7 @@ module.exports = {
       error.statusCode = 400;
       throw error;
     }
-    const images = requireFaceImages(request);
+    const images = requireFaceImages(request, 3, 8);
     const result = await faceClient.enrollFrames(images);
     requireValidFaceAnalysis(result, { requireBackground: false });
 
