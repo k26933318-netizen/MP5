@@ -22,7 +22,10 @@ services:
           name: mp5-face-service
           envVarKey: RENDER_EXTERNAL_URL
       - key: FACE_SERVICE_API_KEY
-        sync: false
+        fromService:
+          type: web
+          name: mp5-face-service
+          envVarKey: FACE_SERVICE_API_KEY
       - key: FACE_ENCRYPTION_KEY
         sync: false
       - key: BLOCKCHAIN_BACKEND
@@ -39,7 +42,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: FACE_SERVICE_API_KEY
-        sync: false
+        generateValue: true
       - key: FACE_DETECTION_SIZE
         value: "320"
       - key: INSIGHTFACE_MODEL_NAME
