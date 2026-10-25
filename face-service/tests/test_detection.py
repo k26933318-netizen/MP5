@@ -50,7 +50,11 @@ class DetectionServiceTests(unittest.TestCase):
         self.assertEqual(raised.exception.detail["code"], "NO_FACE")
 
     def test_rejects_multiple_faces(self):
-        runtime = runtime_for(np.repeat(self.box, 2, axis=0), np.repeat(self.landmarks, 2, axis=0))
+        two_boxes = np.vstack((self.box, np.array([[0, 50, 170, 270, 0.98]], dtype=np.float32)))
+        second_landmarks = self.landmarks.copy()
+        second_landmarks[:, :, 0] -= 75
+        two_landmarks = np.concatenate((self.landmarks, second_landmarks), axis=0)
+        runtime = runtime_for(two_boxes, two_landmarks)
         with patch("app.utils.image_utils.validate_face_quality"):
             with self.assertRaises(HTTPException) as raised:
                 runtime.detect_faces(self.image)
@@ -76,11 +80,27 @@ class DetectionServiceTests(unittest.TestCase):
         self.assertEqual(result["faceCount"], 1)
 
     def test_assessment_still_rejects_two_plausible_faces(self):
-        runtime = runtime_for(np.repeat(self.box, 2, axis=0), np.repeat(self.landmarks, 2, axis=0))
+        two_boxes = np.vstack((self.box, np.array([[0, 50, 170, 270, 0.98]], dtype=np.float32)))
+        second_landmarks = self.landmarks.copy()
+        second_landmarks[:, :, 0] -= 75
+        two_landmarks = np.concatenate((self.landmarks, second_landmarks), axis=0)
+        runtime = runtime_for(two_boxes, two_landmarks)
         with patch("app.utils.image_utils.validate_face_quality"):
             result = runtime.assess_position(self.image)
         self.assertFalse(result["ready"])
         self.assertEqual(result["faceCount"], 2)
+
+    def test_assessment_collapses_nested_boxes_for_the_same_face(self):
+        boxes = np.vstack((
+            self.box,
+            np.array([[105, 100, 215, 220, 0.90], [110, 110, 210, 210, 0.85]], dtype=np.float32),
+        ))
+        runtime = runtime_for(boxes, np.repeat(self.landmarks, 3, axis=0))
+        with patch("app.utils.image_utils.validate_face_quality"), \
+                patch("app.services.detection_service.assess_face", return_value={}):
+            result = runtime.assess_position(self.image)
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["faceCount"], 1)
 
     def test_rejects_small_face_as_low_quality(self):
         small_box = np.array([[10, 10, 40, 40, 0.99]], dtype=np.float32)

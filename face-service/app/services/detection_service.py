@@ -42,6 +42,37 @@ class FaceRecognitionRuntime:
         if len(boxes) <= 1:
             return boxes, landmarks
 
+        # RetinaFace can return a nested box for the same face (for example, a
+        # second box around only the eyes). Suppress those before counting people.
+        ordered = np.argsort(boxes[:, 4])[::-1]
+        kept = []
+        for index in ordered:
+            candidate = boxes[index, :4]
+            x1, y1, x2, y2 = candidate
+            candidate_area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+            duplicate = False
+            for accepted_index in kept:
+                accepted = boxes[accepted_index, :4]
+                ix1, iy1 = max(x1, accepted[0]), max(y1, accepted[1])
+                ix2, iy2 = min(x2, accepted[2]), min(y2, accepted[3])
+                intersection = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+                accepted_area = max(0.0, accepted[2] - accepted[0]) * max(0.0, accepted[3] - accepted[1])
+                smaller_area = min(candidate_area, accepted_area)
+                if smaller_area <= 0 or intersection / smaller_area < 0.80:
+                    continue
+                candidate_center = ((x1 + x2) / 2, (y1 + y2) / 2)
+                accepted_center = ((accepted[0] + accepted[2]) / 2, (accepted[1] + accepted[3]) / 2)
+                center_close = (
+                    abs(candidate_center[0] - accepted_center[0]) <= 0.25 * max(x2 - x1, accepted[2] - accepted[0])
+                    and abs(candidate_center[1] - accepted_center[1]) <= 0.25 * max(y2 - y1, accepted[3] - accepted[1])
+                )
+                if center_close:
+                    duplicate = True
+                    break
+            if not duplicate:
+                kept.append(int(index))
+        boxes, landmarks = boxes[kept], landmarks[kept]
+
         plausible = []
         for index, (box, points) in enumerate(zip(boxes, landmarks)):
             try:
