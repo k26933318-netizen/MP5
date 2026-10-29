@@ -84,19 +84,40 @@ async function start() {
 
 async function electionOfficerDashboard() {
   try {
-    const [electionsData, votersData] = await Promise.all([
+    const [electionsData, votersData, partiesData, candidatesData] = await Promise.all([
       request('/elections').catch(() => ({ elections: [] })),
-      request('/voters').catch(() => ({ voters: [] }))
+      request('/voters').catch(() => ({ voters: [] })),
+      request('/parties').catch(() => ({ parties: [] })),
+      request('/candidate-accounts').catch(() => ({ candidates: [] }))
     ]);
     const elections = electionsData.elections || [];
     const voters = votersData.voters || [];
-    view(`<div class="kicker">Election officer console</div><h2>Election oversight</h2><p class="intro">Monitor election status, voter registrations, and the secure ledger from your officer account.</p><div class="receipt"><div class="receipt-line"><span>Signed in as</span><strong>${currentUser.name || currentUser.username}</strong></div><div class="receipt-line"><span>Role</span><strong>Election Officer</strong></div></div><h3>Election summary</h3><div class="receipt"><div class="receipt-line"><span>Total elections</span><strong>${elections.length}</strong></div><div class="receipt-line"><span>Approved voters</span><strong>${voters.filter(v => v.status === 'APPROVED').length}</strong></div><div class="receipt-line"><span>Pending approvals</span><strong>${voters.filter(v => v.status !== 'APPROVED').length}</strong></div></div><h3>Election records</h3><div class="admin-list">${elections.length ? elections.map(item => `<div class="admin-row"><span><strong>${item.electionName}</strong><small>${item.electionId} · ${item.status}</small></span><span class="approved">${new Date(item.startDate).toLocaleDateString()}</span></div>`).join('') : '<p class="intro">No elections created.</p>'}</div><button class="button secondary full" id="officer-logout">Sign out</button>`);
+    const parties = partiesData.parties || [];
+    const candidateAccounts = candidatesData.candidates || [];
+    view(`<div class="kicker">Election officer console</div><h2>Election oversight</h2><p class="intro">Review voter registrations, approve eligible voters, and add candidate accounts.</p><div class="receipt"><div class="receipt-line"><span>Signed in as</span><strong>${currentUser.name || currentUser.username}</strong></div><div class="receipt-line"><span>Role</span><strong>Election Officer</strong></div></div><h3>Election summary</h3><div class="receipt"><div class="receipt-line"><span>Total elections</span><strong>${elections.length}</strong></div><div class="receipt-line"><span>Approved voters</span><strong>${voters.filter(v => v.status === 'APPROVED').length}</strong></div><div class="receipt-line"><span>Pending approvals</span><strong>${voters.filter(v => v.status !== 'APPROVED').length}</strong></div></div><h3>Voter approvals</h3><div class="admin-list">${voters.length ? voters.map(item => `<div class="admin-row"><span><strong>${item.name}</strong><small>${item.voterId} · ${item.status}</small></span>${item.status === 'APPROVED' ? '<span class="approved">Approved</span>' : `<button class="button small" data-officer-approve="${item.voterId}">Approve</button>`}</div>`).join('') : '<p class="intro">No voter registrations yet.</p>'}</div><h3>Add candidate account</h3><form id="officer-candidate-form" class="form-grid"><div class="field"><label>Candidate ID</label><input id="officer-candidate-id" required placeholder="CAND-001"></div><div class="field"><label>Candidate name</label><input id="officer-candidate-name" required placeholder="Candidate full name"></div><div class="field"><label>Username</label><input id="officer-candidate-username" required placeholder="Candidate username"></div><div class="field"><label>Email</label><input id="officer-candidate-email" type="email" placeholder="candidate@example.com"></div><div class="field"><label>Phone</label><input id="officer-candidate-phone" placeholder="Phone number"></div><div class="field"><label>Party</label><select id="officer-candidate-party" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">No parties available</option>'}</select></div><div class="field"><label>Election ID</label><input id="officer-candidate-election" required value="${elections[0]?.electionId || ''}" placeholder="Election ID"></div><div class="field"><label>Password</label><input id="officer-candidate-password" type="password" required placeholder="Candidate password"></div><button class="button full" ${parties.length ? '' : 'disabled'}>Add candidate account</button></form><div class="admin-list">${candidateAccounts.length ? candidateAccounts.map(candidate => `<div class="admin-row"><span><strong>${candidate.name || candidate.candidateName}</strong><small>${candidate.username} · ${candidate.partyName || 'Unassigned party'}</small></span><span class="approved">${candidate.status || 'APPROVED'}</span></div>`).join('') : '<p class="intro">No candidate accounts created yet.</p>'}</div><h3>Election records</h3><div class="admin-list">${elections.length ? elections.map(item => `<div class="admin-row"><span><strong>${item.electionName}</strong><small>${item.electionId} · ${item.status}</small></span><span class="approved">${new Date(item.startDate).toLocaleDateString()}</span></div>`).join('') : '<p class="intro">No elections created.</p>'}</div><button class="button secondary full" id="officer-logout">Sign out</button>`);
     document.querySelector('#officer-logout').onclick = logout;
+    document.querySelectorAll('[data-officer-approve]').forEach(button => button.onclick = async () => {
+      button.disabled = true;
+      try {
+        await request(`/voters/${encodeURIComponent(button.dataset.officerApprove)}/approve`, { method: 'PATCH', body: JSON.stringify({ status: 'APPROVED' }) });
+        electionOfficerDashboard();
+      } catch (error) {
+        button.disabled = false;
+        button.insertAdjacentHTML('afterend', `<small class="logo-upload-error">${error.message}</small>`);
+      }
+    });
+    document.querySelector('#officer-candidate-form').onsubmit = async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        await request('/candidate-accounts', { method: 'POST', body: JSON.stringify({ candidateId: document.querySelector('#officer-candidate-id').value.trim(), name: document.querySelector('#officer-candidate-name').value.trim(), username: document.querySelector('#officer-candidate-username').value.trim(), email: document.querySelector('#officer-candidate-email').value.trim(), phone: document.querySelector('#officer-candidate-phone').value.trim(), partyId: document.querySelector('#officer-candidate-party').value, electionId: document.querySelector('#officer-candidate-election').value.trim(), password: document.querySelector('#officer-candidate-password').value }) });
+        electionOfficerDashboard();
+      } catch (error) { form.insertAdjacentHTML('afterend', `<div class="notice error">${error.message}</div>`); }
+    };
   } catch (error) {
     view(`<div class="kicker">Officer dashboard unavailable</div><h2>${error.message}</h2><button class="button full" onclick="logout()">Back to login</button>`);
   }
 }
-
 async function candidateDashboard() {
   try {
     const [partiesData, electionsData] = await Promise.all([

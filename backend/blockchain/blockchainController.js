@@ -207,7 +207,7 @@ module.exports = {
     });
   }),
   listVoters: asyncRoute(async (_request, response) => response.json({ success: true, voters: await mongo.listVoters() })),
-  approveVoter: asyncRoute(async (request, response) => response.json({ success: true, voter: await mongo.approveVoter(request.params.voterId, request.body.status || 'APPROVED', request.user?.username || 'ADMIN') })),
+  approveVoter: asyncRoute(async (request, response) => response.json({ success: true, voter: await mongo.approveVoter(request.params.voterId, request.body.status || 'APPROVED', request.user?.username || 'ADMIN', request.user?.role === 'election_officer' ? 'ELECTION_OFFICER' : 'ADMIN') })),
   getVoter: asyncRoute(async (request, response) => {
     if (request.user.role !== 'admin' && request.user.voterId !== request.params.voterId) {
       return response.status(403).json({ success: false, code: 'FORBIDDEN', message: 'You may only view your own voter record.' });

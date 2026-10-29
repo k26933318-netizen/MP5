@@ -359,12 +359,12 @@ async function listVoters() {
   });
 }
 
-async function approveVoter(voterId, status, actor = 'SYSTEM') {
+async function approveVoter(voterId, status, actor = 'SYSTEM', actorRole = 'ADMIN') {
   const result = await (await db()).collection('voters').updateOne({ voterId }, { $set: { status } });
   if (!result.matchedCount) throw new Error('Voter does not exist');
   await logAudit(status === 'APPROVED' ? 'VOTER_APPROVED' : 'VOTER_REJECTED', {
     actorId: actor,
-    actorRole: 'ADMIN',
+    actorRole,
     resourceType: 'VOTER',
     resourceId: voterId,
     status: 'SUCCESS',

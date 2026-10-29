@@ -72,7 +72,12 @@ router.get('/voters', auth.requireAuth, (request, response, next) => {
   }
   next();
 }, controller.listVoters);
-router.patch('/voters/:voterId/approve', auth.requireRole('admin'), controller.approveVoter);
+router.patch('/voters/:voterId/approve', auth.requireAuth, (request, response, next) => {
+  if (!['admin', 'election_officer'].includes(request.user.role)) {
+    return response.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Administrator or election officer access required.' });
+  }
+  next();
+}, controller.approveVoter);
 router.get('/voters/:voterId', auth.requireAuth, controller.getVoter);
 router.post('/voters/:voterId/face', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.enrollFace);
 router.get('/face/status', auth.requireRole('voter'), controller.faceStatus);
@@ -96,8 +101,18 @@ router.post('/alliances', auth.requireRole('admin'), controller.registerAlliance
 router.get('/alliances', auth.requireRole('admin'), controller.listAlliances);
 router.post('/officers', auth.requireRole('admin'), controller.registerElectionOfficer);
 router.get('/officers', auth.requireRole('admin'), controller.listElectionOfficers);
-router.post('/candidate-accounts', auth.requireRole('admin'), controller.registerCandidateAccount);
-router.get('/candidate-accounts', auth.requireRole('admin'), controller.listCandidateAccounts);
+router.post('/candidate-accounts', auth.requireAuth, (request, response, next) => {
+  if (!['admin', 'election_officer'].includes(request.user.role)) {
+    return response.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Administrator or election officer access required.' });
+  }
+  next();
+}, controller.registerCandidateAccount);
+router.get('/candidate-accounts', auth.requireAuth, (request, response, next) => {
+  if (!['admin', 'election_officer'].includes(request.user.role)) {
+    return response.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Administrator or election officer access required.' });
+  }
+  next();
+}, controller.listCandidateAccounts);
 router.post('/vote', auth.requireRole('voter'), controller.castVote);
 router.get('/vote/:voteId', auth.requireAuth, controller.getVote);
 router.get('/election/:electionId/votes', auth.requireRole('admin'), controller.getElectionVotes);

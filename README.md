@@ -181,6 +181,9 @@ All application endpoints are under `/api/blockchain`:
 | `POST` | `/api/blockchain/auth/login` | Public | Role-specific login for voters, admins, election officers, and candidates |
 | `POST` | `/api/blockchain/voters` | Public | Multipart `images` frames plus voter details and explicit face-template consent; server validates the sequence and rejects duplicate faces before account creation |
 | `GET` | `/api/blockchain/voters` | Admin, election officer | List voters and approval statuses |
+| `PATCH` | `/api/blockchain/voters/:voterId/approve` | Admin, election officer | Approve or reject voter registrations |
+| `POST` | `/api/blockchain/candidate-accounts` | Admin, election officer | Create candidate accounts |
+| `GET` | `/api/blockchain/candidate-accounts` | Admin, election officer | List candidate accounts |
 | `POST` | `/api/blockchain/parties` | Admin | Multipart party details and optional JPEG, PNG, or WebP logo (2 MB maximum) |
 | `PATCH` | `/api/blockchain/parties/:partyId/logo` | Admin | Replace the logo for an existing party |
 | `GET` | `/api/blockchain/parties` | Authenticated | Party data, including logos shown on the ballot |
