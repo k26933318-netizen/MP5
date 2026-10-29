@@ -78,6 +78,7 @@ router.patch('/voters/:voterId/approve', auth.requireAuth, (request, response, n
   }
   next();
 }, controller.approveVoter);
+router.patch('/voters/:voterId', auth.requireRole('admin'), controller.updateVoter);
 router.get('/voters/:voterId', auth.requireAuth, controller.getVoter);
 router.post('/voters/:voterId/face', auth.requireRole('voter'), faceLimiter, faceSequenceUpload.array('images', 15), controller.enrollFace);
 router.get('/face/status', auth.requireRole('voter'), controller.faceStatus);
@@ -101,6 +102,7 @@ router.post('/alliances', auth.requireRole('admin'), controller.registerAlliance
 router.get('/alliances', auth.requireRole('admin'), controller.listAlliances);
 router.post('/officers', auth.requireRole('admin'), controller.registerElectionOfficer);
 router.get('/officers', auth.requireRole('admin'), controller.listElectionOfficers);
+router.patch('/officers/:officerId', auth.requireRole('admin'), controller.updateElectionOfficer);
 router.post('/candidate-accounts', auth.requireAuth, (request, response, next) => {
   if (!['admin', 'election_officer'].includes(request.user.role)) {
     return response.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Administrator or election officer access required.' });
@@ -113,6 +115,7 @@ router.get('/candidate-accounts', auth.requireAuth, (request, response, next) =>
   }
   next();
 }, controller.listCandidateAccounts);
+router.patch('/candidate-accounts/:candidateId', auth.requireRole('admin'), controller.updateCandidateAccount);
 router.post('/vote', auth.requireRole('voter'), controller.castVote);
 router.get('/vote/:voteId', auth.requireAuth, controller.getVote);
 router.get('/election/:electionId/votes', auth.requireRole('admin'), controller.getElectionVotes);

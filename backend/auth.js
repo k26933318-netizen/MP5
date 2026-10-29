@@ -74,7 +74,7 @@ async function login(input) {
 
   if (input.role === 'election_officer') {
     const officer = await mongo.getElectionOfficerCredentials(input.username);
-    if (!officer) {
+    if (!officer || officer.status !== 'APPROVED') {
       markFailedLogin(key);
       throw new Error('Invalid election officer credentials');
     }
@@ -89,7 +89,7 @@ async function login(input) {
 
   if (input.role === 'candidate') {
     const candidate = await mongo.getCandidateCredentials(input.username);
-    if (!candidate) {
+    if (!candidate || candidate.status !== 'APPROVED') {
       markFailedLogin(key);
       throw new Error('Invalid candidate credentials');
     }

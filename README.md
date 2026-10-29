@@ -9,6 +9,7 @@ VoteLedger is an electronic-voting prototype with voter, administrator, election
 - Voter registration captures three face frames and checks positioning, image quality, stability, presentation-attack scores, and duplicate enrollment before account creation; a white background is not required, and only the encrypted template is retained.
 - Admin approval; role-based sign-in for voters, admins, election officers, and candidates.
 - Party, alliance, candidate, officer, and election administration.
+- Admins can review and edit voter, officer, and candidate profiles, manage account status, and record changes in the audit log.
 - Election lifecycle rules and voting-date validation.
 - Live camera feedback uses RetinaFace bounding boxes to move a tracking box independently of the fixed positioning guide. Enrollment allows a wider position range and does not require a white background; voting verification retains its stricter position and background checks.
 - Recognition requires a backend-issued, randomized head-turn-and-return challenge, multiple ordered camera frames, and the two-model MiniFASNet passive presentation-attack check. Challenge use is bound to voter, election, browser session, expiration, and one-time consumption.
@@ -60,6 +61,18 @@ The service loads its face-recognition and anti-spoof models once at startup and
 - A modern browser with camera access. Camera access requires HTTPS, except for localhost.
 
 ## Configuration
+
+### Seeded demo accounts
+
+For local demonstration only, database initialization creates these approved accounts (select the matching account type at sign-in):
+
+| Account type | Username | Password |
+| --- | --- | --- |
+| Voter | `VOTER001` | `Vote@123` |
+| Election officer | `officer1`, `officer2`, or `officer3` | `Officer@123` |
+| Candidate | `candidate1`, `candidate2`, or `candidate3` | `Candidate@123` |
+
+These are public demo credentials and must not be used in a real deployment. Change or remove them before deploying. The administrator login is configured separately with `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
 
 Copy `.env.example` to `.env`, then set strong unique secrets. Generate secrets with:
 

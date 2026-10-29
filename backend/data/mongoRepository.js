@@ -109,9 +109,145 @@ async function seed(database) {
 
   const officerPasswordHash = await bcrypt.hash('Officer@123', 12);
   await officers.updateOne({ officerId: 'OFF-001' }, { $setOnInsert: { officerId: 'OFF-001', name: 'Kavitha Raman', username: 'officer1', email: 'officer1@example.com', contactNumber: '+91 90000 00002', passwordHash: officerPasswordHash, role: 'ELECTION_OFFICER', status: 'APPROVED', createdAt: new Date() } }, { upsert: true });
+  await officers.updateOne({ officerId: 'OFF-002' }, { $setOnInsert: { officerId: 'OFF-002', name: 'Suresh Iyer', username: 'officer2', email: 'officer2@example.com', contactNumber: '+91 90000 00003', passwordHash: officerPasswordHash, role: 'ELECTION_OFFICER', status: 'APPROVED', createdAt: new Date() } }, { upsert: true });
+  await officers.updateOne({ officerId: 'OFF-003' }, { $setOnInsert: { officerId: 'OFF-003', name: 'Priya Nair', username: 'officer3', email: 'officer3@example.com', contactNumber: '+91 90000 00004', passwordHash: officerPasswordHash, role: 'ELECTION_OFFICER', status: 'APPROVED', createdAt: new Date() } }, { upsert: true });
 
   const candidatePasswordHash = await bcrypt.hash('Candidate@123', 12);
   await candidates.updateOne({ candidateId: 'CAND-001' }, { $setOnInsert: { candidateId: 'CAND-001', name: 'Arjun Kumar', candidateName: 'Arjun Kumar', username: 'candidate1', email: 'candidate1@example.com', passwordHash: candidatePasswordHash, partyId: 'PARTY-001', partyName: 'Progress Alliance', electionId: 'TN-ASSEMBLY-2026', status: 'APPROVED', role: 'CANDIDATE', createdAt: new Date() } }, { upsert: true });
+  await candidates.updateOne({ candidateId: 'CAND-002' }, { $setOnInsert: { candidateId: 'CAND-002', name: 'Meera Krishnan', candidateName: 'Meera Krishnan', username: 'candidate2', email: 'candidate2@example.com', phone: '+91 90000 00005', passwordHash: candidatePasswordHash, partyId: 'PARTY-002', partyName: 'People First', electionId: 'TN-ASSEMBLY-2026', status: 'APPROVED', role: 'CANDIDATE', createdAt: new Date() } }, { upsert: true });
+  await candidates.updateOne({ candidateId: 'CAND-003' }, { $setOnInsert: { candidateId: 'CAND-003', name: 'Ravi Subramaniam', candidateName: 'Ravi Subramaniam', username: 'candidate3', email: 'candidate3@example.com', phone: '+91 90000 00006', passwordHash: candidatePasswordHash, partyId: 'PARTY-003', partyName: 'New Tamil Front', electionId: 'TN-ASSEMBLY-2026', status: 'APPROVED', role: 'CANDIDATE', createdAt: new Date() } }, { upsert: true });
+}
+
+async function updateManagedAccount(collectionName, idField, id, updates, actor, resourceType, allowedFields) {
+  const clean = {};
+  for (const field of allowedFields) {
+    if (Object.hasOwn(updates || {}, field)) {
+      const value = updates[field];
+      if (field === 'address') {
+        if (value !== null && (typeof value !== 'object' || Array.isArray(value))) {
+          const error = new Error('Address details must be an object.');
+          error.statusCode = 400;
+          throw error;
+        }
+        if (value === null) {
+          clean[field] = null;
+        } else {
+          clean[field] = {};
+          for (const addressField of ['city', 'district', 'state', 'pincode']) {
+            if (value[addressField] === undefined || value[addressField] === null) continue;
+            if (typeof value[addressField] !== 'string') {
+              const error = new Error('Address details must be text.');
+              error.statusCode = 400;
+              throw error;
+            }
+            const addressValue = value[addressField].trim();
+            if (addressValue) clean[field][addressField] = addressValue;
+          }
+        }
+      } else if (typeof value !== 'string') {
+        const error = new Error(`${field} must be text.`);
+        error.statusCode = 400;
+        throw error;
+      } else {
+        clean[field] = value.trim();
+      }
+    }
+  }
+  if (!Object.keys(clean).length) {
+    const error = new Error('Provide at least one editable detail.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if ((Object.hasOwn(clean, 'name') && !clean.name) || (Object.hasOwn(clean, 'candidateName') && !clean.candidateName)) {
+    const error = new Error('A name is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (Object.hasOwn(clean, 'username')) {
+    clean.username = clean.username.trim();
+    if (!/^[A-Za-z0-9._-]{3,40}$/.test(clean.username)) {
+      const error = new Error('Username must be 3–40 characters and use only letters, numbers, dots, underscores, or hyphens.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  if (Object.hasOwn(clean, 'email')) {
+    clean.email = clean.email.trim().toLowerCase();
+    if (clean.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean.email)) {
+      const error = new Error('Enter a valid email address.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  for (const field of ['phone', 'contactNumber']) {
+    if (clean[field] && !/^[+\d().\-\s]{7,24}$/.test(clean[field])) {
+      const error = new Error('Enter a valid phone number.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  if (Object.hasOwn(clean, 'status')) clean.status = clean.status.toUpperCase();
+  if (clean.status && !({ VOTER: ['PENDING', 'APPROVED', 'REJECTED'], ELECTION_OFFICER: ['APPROVED', 'SUSPENDED'], CANDIDATE: ['APPROVED', 'SUSPENDED'] }[resourceType] || []).includes(clean.status)) {
+    const error = new Error('The account status is invalid.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const collection = (await db()).collection(collectionName);
+  for (const field of ['username', 'email']) {
+    if (!clean[field]) continue;
+    const duplicate = await collection.findOne({
+      [idField]: { $ne: id },
+      [field]: { $regex: `^${clean[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }
+    }, { projection: { _id: 0, [idField]: 1 } });
+    if (duplicate) {
+      const error = new Error(`That ${field === 'email' ? 'email address' : 'username'} is already in use.`);
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+  clean.updatedAt = new Date();
+  const result = await collection.updateOne({ [idField]: id }, { $set: clean });
+  if (!result.matchedCount) {
+    const error = new Error(`${resourceType} does not exist.`);
+    error.statusCode = 404;
+    throw error;
+  }
+  await logAudit(`${resourceType}_UPDATED`, { actorId: actor || 'ADMIN', actorRole: 'ADMIN', resourceType, resourceId: id, status: 'SUCCESS', description: `${resourceType} details updated` });
+  return collection.findOne({ [idField]: id }, { projection: { _id: 0, passwordHash: 0 } });
+}
+
+function updateVoter(voterId, updates, actor) {
+  return updateManagedAccount('voters', 'voterId', voterId, updates, actor, 'VOTER', ['name', 'dob', 'gender', 'phone', 'email', 'address', 'aadhaarRef', 'status']);
+}
+function updateElectionOfficer(officerId, updates, actor) {
+  return updateManagedAccount('electionOfficers', 'officerId', officerId, updates, actor, 'ELECTION_OFFICER', ['name', 'username', 'email', 'contactNumber', 'status']);
+}
+async function updateCandidateAccount(candidateId, updates, actor) {
+  const clean = { ...updates };
+  if (Object.hasOwn(clean, 'partyId') && typeof clean.partyId !== 'string') {
+    const error = new Error('Select a valid party.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (Object.hasOwn(clean, 'partyId') && clean.partyId) {
+    const party = await getParty(clean.partyId);
+    if (!party) {
+      const error = new Error('The selected party does not exist.');
+      error.statusCode = 400;
+      throw error;
+    }
+    clean.partyName = party.partyName;
+  }
+  if (Object.hasOwn(clean, 'electionId')) {
+    if (typeof clean.electionId !== 'string' || !clean.electionId.trim() || !(await getElection(clean.electionId.trim()))) {
+      const error = new Error('The selected election does not exist.');
+      error.statusCode = 400;
+      throw error;
+    }
+    clean.electionId = clean.electionId.trim();
+  }
+  if (clean.name && !clean.candidateName) clean.candidateName = clean.name;
+  return updateManagedAccount('candidates', 'candidateId', candidateId, clean, actor, 'CANDIDATE', ['name', 'candidateName', 'username', 'email', 'phone', 'partyId', 'partyName', 'electionId', 'status']);
 }
 
 function validateElectionStateTransition(currentStatus, nextStatus) {
@@ -678,15 +814,18 @@ module.exports = {
   listAlliances,
   registerElectionOfficer,
   listElectionOfficers,
+  updateElectionOfficer,
   getElectionOfficerCredentials,
   registerCandidateAccount,
   listCandidateAccounts,
+  updateCandidateAccount,
   getCandidateCredentials,
   registerVoter,
   getVoter,
   getVoterWithFaceStatus,
   getVoterCredentials,
   listVoters,
+  updateVoter,
   approveVoter,
   saveFaceEnrollment,
   withFaceEnrollmentLock,

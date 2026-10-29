@@ -207,6 +207,7 @@ module.exports = {
     });
   }),
   listVoters: asyncRoute(async (_request, response) => response.json({ success: true, voters: await mongo.listVoters() })),
+  updateVoter: asyncRoute(async (request, response) => response.json({ success: true, voter: await mongo.updateVoter(request.params.voterId, request.body, request.user?.username) })),
   approveVoter: asyncRoute(async (request, response) => response.json({ success: true, voter: await mongo.approveVoter(request.params.voterId, request.body.status || 'APPROVED', request.user?.username || 'ADMIN', request.user?.role === 'election_officer' ? 'ELECTION_OFFICER' : 'ADMIN') })),
   getVoter: asyncRoute(async (request, response) => {
     if (request.user.role !== 'admin' && request.user.voterId !== request.params.voterId) {
@@ -475,6 +476,7 @@ module.exports = {
   listAlliances: asyncRoute(async (_request, response) => response.json({ success: true, alliances: await mongo.listAlliances() })),
   registerElectionOfficer: send(['officerId', 'name', 'username', 'password'], input => mongo.registerElectionOfficer(input)),
   listElectionOfficers: asyncRoute(async (_request, response) => response.json({ success: true, officers: await mongo.listElectionOfficers() })),
+  updateElectionOfficer: asyncRoute(async (request, response) => response.json({ success: true, officer: await mongo.updateElectionOfficer(request.params.officerId, request.body, request.user?.username) })),
   getFaceVerificationSetting: asyncRoute(async (_request, response) => {
     const settings = await mongo.getVotingSettings();
     return response.json({ success: true, enabled: settings.faceVerificationEnabled });
@@ -498,6 +500,7 @@ module.exports = {
   }),
   registerCandidateAccount: send(['candidateId', 'name', 'username', 'password', 'partyId'], input => mongo.registerCandidateAccount(input)),
   listCandidateAccounts: asyncRoute(async (_request, response) => response.json({ success: true, candidates: await mongo.listCandidateAccounts() })),
+  updateCandidateAccount: asyncRoute(async (request, response) => response.json({ success: true, candidate: await mongo.updateCandidateAccount(request.params.candidateId, request.body, request.user?.username) })),
   castVote: asyncRoute(async (request, response) => {
     const input = body(request);
     validate(input, ['electionId', 'candidateId']);

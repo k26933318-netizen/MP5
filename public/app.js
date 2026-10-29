@@ -338,6 +338,181 @@ function setupPartyLogoControls(parties) {
   });
 }
 
+function createAccountDialog(title, description) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'account-dialog';
+  dialog.setAttribute('aria-labelledby', 'account-dialog-title');
+  const panel = document.createElement('div');
+  panel.className = 'account-dialog-panel';
+  const heading = document.createElement('div');
+  heading.className = 'account-dialog-heading';
+  const copy = document.createElement('div');
+  const titleElement = document.createElement('h2');
+  titleElement.id = 'account-dialog-title';
+  titleElement.textContent = title;
+  const descriptionElement = document.createElement('p');
+  descriptionElement.textContent = description;
+  copy.append(titleElement, descriptionElement);
+  const close = document.createElement('button');
+  close.className = 'button secondary account-dialog-close';
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Close dialog');
+  close.textContent = 'Close';
+  close.addEventListener('click', () => dialog.close());
+  heading.append(copy, close);
+  panel.append(heading);
+  dialog.append(panel);
+  app.querySelector('.view').append(dialog);
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.showModal();
+  return { dialog, panel };
+}
+
+function appendAccountInput(form, { name, label, value = '', type = 'text', required = false, options = null }) {
+  const field = document.createElement('div');
+  field.className = 'field';
+  const labelElement = document.createElement('label');
+  labelElement.htmlFor = `account-edit-${name}`;
+  labelElement.textContent = label;
+  let control;
+  if (options) {
+    control = document.createElement('select');
+    options.forEach(optionValue => {
+      const option = document.createElement('option');
+      option.value = optionValue;
+      option.textContent = optionValue || 'Not set';
+      control.append(option);
+    });
+  } else {
+    control = document.createElement('input');
+    control.type = type;
+  }
+  control.id = `account-edit-${name}`;
+  control.name = name;
+  control.value = value == null ? '' : String(value);
+  control.required = required;
+  field.append(labelElement, control);
+  form.append(field);
+}
+
+function showAccountDetails(type, item, idField) {
+  const labels = {
+    voter: [['name', 'Full name'], ['dob', 'Date of birth'], ['gender', 'Gender'], ['phone', 'Phone'], ['email', 'Email'], ['address', 'Address'], ['aadhaarRef', 'Identity reference'], ['status', 'Registration status']],
+    officer: [['name', 'Full name'], ['username', 'Username'], ['email', 'Email'], ['contactNumber', 'Contact number'], ['status', 'Account status']],
+    candidate: [['name', 'Full name'], ['username', 'Username'], ['email', 'Email'], ['phone', 'Phone'], ['partyName', 'Party'], ['electionId', 'Election'], ['status', 'Account status']]
+  };
+  const { panel } = createAccountDialog(`${type[0].toUpperCase()}${type.slice(1)} details`, `Account ${item[idField]}`);
+  const details = document.createElement('dl');
+  details.className = 'account-detail-list';
+  labels[type].forEach(([field, label]) => {
+    const term = document.createElement('dt');
+    term.textContent = label;
+    const value = document.createElement('dd');
+    let text = item[field];
+    if (field === 'address') text = text ? [text.city, text.district, text.state, text.pincode].filter(Boolean).join(', ') : '';
+    if (field === 'aadhaarRef' && text) text = `•••• ${String(text).slice(-4)}`;
+    value.textContent = text == null || text === '' ? 'Not provided' : String(text);
+    details.append(term, value);
+  });
+  panel.append(details);
+}
+
+function editAccount(type, item, idField, route, parties) {
+  const fieldsByType = {
+    voter: [
+      { name: 'name', label: 'Full name', required: true },
+      { name: 'dob', label: 'Date of birth', type: 'date' },
+      { name: 'gender', label: 'Gender' },
+      { name: 'phone', label: 'Phone' },
+      { name: 'email', label: 'Email', type: 'email' },
+      { name: 'aadhaarRef', label: 'Identity reference' },
+      { name: 'city', label: 'City', value: item.address?.city },
+      { name: 'district', label: 'District', value: item.address?.district },
+      { name: 'state', label: 'State', value: item.address?.state },
+      { name: 'pincode', label: 'PIN code', value: item.address?.pincode },
+      { name: 'status', label: 'Registration status', options: ['PENDING', 'APPROVED', 'REJECTED'] }
+    ],
+    officer: [
+      { name: 'name', label: 'Full name', required: true },
+      { name: 'username', label: 'Username', required: true },
+      { name: 'email', label: 'Email', type: 'email' },
+      { name: 'contactNumber', label: 'Contact number' },
+      { name: 'status', label: 'Account status', options: ['APPROVED', 'SUSPENDED'] }
+    ],
+    candidate: [
+      { name: 'name', label: 'Full name', required: true },
+      { name: 'username', label: 'Username', required: true },
+      { name: 'email', label: 'Email', type: 'email' },
+      { name: 'phone', label: 'Phone' },
+      { name: 'partyId', label: 'Party', options: parties.map(party => party.partyId), value: item.partyId },
+      { name: 'electionId', label: 'Election ID' },
+      { name: 'status', label: 'Account status', options: ['APPROVED', 'SUSPENDED'] }
+    ]
+  };
+  const definitions = fieldsByType[type];
+  const { dialog, panel } = createAccountDialog(`Edit ${type} account`, `Update the details for ${item.name || item.candidateName || item.username || item[idField]}.`);
+  const form = document.createElement('form');
+  form.className = 'account-edit-form';
+  definitions.forEach(definition => {
+    const currentValue = definition.value !== undefined ? definition.value : item[definition.name];
+    const value = definition.type === 'date' && currentValue
+      ? String(currentValue).slice(0, 10)
+      : definition.options && !definition.options.includes(currentValue)
+        ? definition.options[0]
+        : currentValue;
+    appendAccountInput(form, { ...definition, value });
+  });
+  const error = document.createElement('div');
+  error.className = 'notice error account-edit-error';
+  error.setAttribute('role', 'alert');
+  error.hidden = true;
+  form.append(error);
+  const actions = document.createElement('div');
+  actions.className = 'account-dialog-actions';
+  const cancel = document.createElement('button');
+  cancel.className = 'button secondary';
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => dialog.close());
+  const save = document.createElement('button');
+  save.className = 'button';
+  save.type = 'submit';
+  save.textContent = 'Save changes';
+  actions.append(cancel, save);
+  form.append(actions);
+  panel.append(form);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const updates = {};
+    definitions.forEach(definition => {
+      if (!['city', 'district', 'state', 'pincode'].includes(definition.name)) updates[definition.name] = values[definition.name];
+    });
+    if (type === 'voter') {
+      const address = Object.fromEntries(['city', 'district', 'state', 'pincode'].map(key => [key, values[key].trim()]).filter(([, value]) => value));
+      updates.address = Object.keys(address).length ? address : null;
+    }
+    if (type === 'candidate') updates.candidateName = updates.name;
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    error.hidden = true;
+    try {
+      await request(`${route}${encodeURIComponent(item[idField])}`, { method: 'PATCH', body: JSON.stringify(updates) });
+      dialog.close();
+      await adminDashboard();
+    } catch (saveError) {
+      error.textContent = saveError.message;
+      error.hidden = false;
+      save.disabled = false;
+      save.textContent = 'Save changes';
+    }
+  });
+}
+
 async function adminDashboard() {
   const sidebar = document.querySelector('.sidebar');
   sidebar.classList.add('admin-sidebar');
@@ -360,7 +535,7 @@ async function adminDashboard() {
   const integrity = ledgerMode === 'fabric'
     ? { integrity: { status: 'Fabric peer ledger' } }
     : await request('/ledger/TN-ASSEMBLY-2026/integrity').catch(() => ({ integrity: { status: 'UNKNOWN', recordsChecked: 0, brokenLinks: 0, invalidHashes: 0, verifiedAt: new Date().toISOString() } }));
-  view(`<div class="kicker">Admin console</div><h2>Election management</h2><p class="intro">Manage voter approvals, party and alliance records, election officers, and candidate accounts from one control panel.</p><div class="receipt"><div class="receipt-line"><span>Signed in as</span><strong>${currentUser.username}</strong></div><div class="receipt-line"><span>Permission</span><strong>Administrator</strong></div></div><h3>Security overview</h3><div class="receipt"><div class="receipt-line"><span>Total elections</span><strong>${elections.length}</strong></div><div class="receipt-line"><span>Approved voters</span><strong>${voters.filter(v => v.status === 'APPROVED').length}</strong></div><div class="receipt-line"><span>Registered parties</span><strong>${parties.length}</strong></div><div class="receipt-line"><span>Ledger status</span><strong>${integrity.integrity.status}</strong></div></div><h3>Party management</h3><form id="party-form" class="form-grid"><div class="field"><label>Party ID</label><input id="party-id" required placeholder="PARTY-001"></div><div class="field"><label>Party name</label><input id="party-name" required placeholder="Party name"></div><div class="field"><label>Party symbol</label><input id="party-symbol" placeholder="e.g. Lotus"></div><div class="field"><label>President name</label><input id="party-president" placeholder="President name"></div><div class="field"><label>Founded year</label><input id="party-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Add party</button></form><div class="admin-list">${parties.length ? parties.map(party => `<div class="admin-row"><span><strong>${party.partyName}</strong><small>${party.partyId}${party.partySymbol ? ` · ${party.partySymbol}` : ''}</small></span><span class="approved">${party.presidentName || 'Party'}</span></div>`).join('') : '<p class="intro">No parties added yet.</p>'}</div><h3>Alliance management</h3><form id="alliance-form" class="form-grid"><div class="field"><label>Alliance ID</label><input id="alliance-id" required placeholder="ALLIANCE-001"></div><div class="field"><label>Alliance name</label><input id="alliance-name" required placeholder="Alliance name"></div><div class="field"><label>Alliance symbol</label><input id="alliance-symbol" placeholder="Symbol"></div><div class="field"><label>Leader party</label><select id="leader-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Formed year</label><input id="alliance-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Create alliance</button></form><div class="admin-list">${alliances.length ? alliances.map(alliance => `<div class="admin-row"><span><strong>${alliance.allianceName}</strong><small>${alliance.allianceId} · ${alliance.leaderPartyId || 'No leader'}</small></span><span class="approved">${alliance.allianceSymbol || 'Alliance'}</span></div>`).join('') : '<p class="intro">No alliances created yet.</p>'}</div><h3>Election officer management</h3><form id="officer-form" class="form-grid"><div class="field"><label>Officer ID</label><input id="officer-id" required placeholder="OFF-001"></div><div class="field"><label>Name</label><input id="officer-name" required placeholder="Officer name"></div><div class="field"><label>Username</label><input id="officer-username" required placeholder="Officer username"></div><div class="field"><label>Email</label><input id="officer-email" type="email" placeholder="officer@voteledger.gov"></div><div class="field"><label>Contact number</label><input id="officer-phone" placeholder="Contact number"></div><div class="field"><label>Password</label><input id="officer-password" type="password" required placeholder="Secure password"></div><button class="button full">Add officer</button></form><div class="admin-list">${officers.length ? officers.map(officer => `<div class="admin-row"><span><strong>${officer.name}</strong><small>${officer.username} · ${officer.role || 'ELECTION_OFFICER'}</small></span><span class="approved">${officer.status || 'APPROVED'}</span></div>`).join('') : '<p class="intro">No officers added yet.</p>'}</div><h3>Candidate account management</h3><form id="candidate-form" class="form-grid"><div class="field"><label>Candidate ID</label><input id="candidate-id" required placeholder="CAND-001"></div><div class="field"><label>Candidate name</label><input id="candidate-name" required placeholder="Candidate full name"></div><div class="field"><label>Username</label><input id="candidate-username" required placeholder="Candidate username"></div><div class="field"><label>Email</label><input id="candidate-email" type="email" placeholder="candidate@example.com"></div><div class="field"><label>Phone</label><input id="candidate-phone" placeholder="Phone number"></div><div class="field"><label>Party</label><select id="candidate-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Election ID</label><input id="candidate-election-id" placeholder="TN-ASSEMBLY-2026"></div><div class="field"><label>Password</label><input id="candidate-password" type="password" required placeholder="Candidate password"></div><button class="button full">Add candidate account</button></form><div class="admin-list">${candidateAccounts.length ? candidateAccounts.map(candidate => `<div class="admin-row"><span><strong>${candidate.name || candidate.candidateName}</strong><small>${candidate.username} · ${candidate.partyName || 'Unassigned party'}</small></span><span class="approved">${candidate.status || 'APPROVED'}</span></div>`).join('') : '<p class="intro">No candidate accounts created yet.</p>'}</div><h3>Voter approvals</h3><div class="admin-list">${voters.length ? voters.map(voterItem => `<div class="admin-row"><span><strong>${voterItem.name}</strong><small>${voterItem.voterId} · ${voterItem.status}</small></span>${voterItem.status === 'APPROVED' ? '<span class="approved">Approved</span>' : `<button class="button small" data-approve="${voterItem.voterId}">Approve</button>`}</div>`).join('') : '<p class="intro">No voter registrations yet.</p>'}</div><h3>Create election</h3><form id="election-form" class="form-grid"><div class="field"><label>Election ID</label><input id="election-id" required placeholder="ELECTION2026"></div><div class="field"><label>Election name</label><input id="election-name" required placeholder="Election name"></div><div class="field"><label>Start date</label><input id="start-date" type="datetime-local" required></div><div class="field"><label>End date</label><input id="end-date" type="datetime-local" required></div><button class="button full">Create election</button></form><section id="admin-results" class="admin-results"><div class="results-heading"><div><h3>Election results &amp; records</h3><p>Vote totals and anonymized transaction records.</p></div><label for="results-election">Election</label><select id="results-election"></select></div><div id="results-error" class="notice error" role="alert" hidden></div><div id="results-content"><p class="intro">Select an election to load its recorded results.</p></div></section><button class="button secondary full" id="verify-ledger">VERIFY LEDGER</button><button class="button secondary full" id="admin-logout">Sign out</button>`);
+  view(`<div class="kicker">Admin console</div><h2>Election management</h2><p class="intro">Manage voter approvals, party and alliance records, election officers, and candidate accounts from one control panel.</p><div class="receipt"><div class="receipt-line"><span>Signed in as</span><strong>${currentUser.username}</strong></div><div class="receipt-line"><span>Permission</span><strong>Administrator</strong></div></div><h3>Security overview</h3><div class="receipt"><div class="receipt-line"><span>Total elections</span><strong>${elections.length}</strong></div><div class="receipt-line"><span>Approved voters</span><strong>${voters.filter(v => v.status === 'APPROVED').length}</strong></div><div class="receipt-line"><span>Registered parties</span><strong>${parties.length}</strong></div><div class="receipt-line"><span>Ledger status</span><strong>${integrity.integrity.status}</strong></div></div><h3>Party management</h3><form id="party-form" class="form-grid"><div class="field"><label>Party ID</label><input id="party-id" required placeholder="PARTY-001"></div><div class="field"><label>Party name</label><input id="party-name" required placeholder="Party name"></div><div class="field"><label>Party symbol</label><input id="party-symbol" placeholder="e.g. Lotus"></div><div class="field"><label>President name</label><input id="party-president" placeholder="President name"></div><div class="field"><label>Founded year</label><input id="party-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Add party</button></form><div class="admin-list">${parties.length ? parties.map(party => `<div class="admin-row"><span><strong>${party.partyName}</strong><small>${party.partyId}${party.partySymbol ? ` · ${party.partySymbol}` : ''}</small></span><span class="approved">${party.presidentName || 'Party'}</span></div>`).join('') : '<p class="intro">No parties added yet.</p>'}</div><h3>Alliance management</h3><form id="alliance-form" class="form-grid"><div class="field"><label>Alliance ID</label><input id="alliance-id" required placeholder="ALLIANCE-001"></div><div class="field"><label>Alliance name</label><input id="alliance-name" required placeholder="Alliance name"></div><div class="field"><label>Alliance symbol</label><input id="alliance-symbol" placeholder="Symbol"></div><div class="field"><label>Leader party</label><select id="leader-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Formed year</label><input id="alliance-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Create alliance</button></form><div class="admin-list">${alliances.length ? alliances.map(alliance => `<div class="admin-row"><span><strong>${alliance.allianceName}</strong><small>${alliance.allianceId} · ${alliance.leaderPartyId || 'No leader'}</small></span><span class="approved">${alliance.allianceSymbol || 'Alliance'}</span></div>`).join('') : '<p class="intro">No alliances created yet.</p>'}</div><h3>Election officer management</h3><form id="officer-form" class="form-grid"><div class="field"><label>Officer ID</label><input id="officer-id" required placeholder="OFF-001"></div><div class="field"><label>Name</label><input id="officer-name" required placeholder="Officer name"></div><div class="field"><label>Username</label><input id="officer-username" required placeholder="Officer username"></div><div class="field"><label>Email</label><input id="officer-email" type="email" placeholder="officer@voteledger.gov"></div><div class="field"><label>Contact number</label><input id="officer-phone" placeholder="Contact number"></div><div class="field"><label>Password</label><input id="officer-password" type="password" required placeholder="Secure password"></div><button class="button full">Add officer</button></form><div class="admin-list">${officers.length ? officers.map(officer => `<div class="admin-row"><span><strong>${officer.name}</strong><small>${officer.username} · ${officer.role || 'ELECTION_OFFICER'}</small></span><span class="approved">${officer.status || 'APPROVED'}</span><button class="button small" data-account-view="officer" data-account-id="${officer.officerId}">View</button><button class="button small" data-account-edit="officer" data-account-id="${officer.officerId}">Edit</button></div>`).join('') : '<p class="intro">No officers added yet.</p>'}</div><h3>Candidate account management</h3><form id="candidate-form" class="form-grid"><div class="field"><label>Candidate ID</label><input id="candidate-id" required placeholder="CAND-001"></div><div class="field"><label>Candidate name</label><input id="candidate-name" required placeholder="Candidate full name"></div><div class="field"><label>Username</label><input id="candidate-username" required placeholder="Candidate username"></div><div class="field"><label>Email</label><input id="candidate-email" type="email" placeholder="candidate@example.com"></div><div class="field"><label>Phone</label><input id="candidate-phone" placeholder="Phone number"></div><div class="field"><label>Party</label><select id="candidate-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Election ID</label><input id="candidate-election-id" placeholder="TN-ASSEMBLY-2026"></div><div class="field"><label>Password</label><input id="candidate-password" type="password" required placeholder="Candidate password"></div><button class="button full">Add candidate account</button></form><div class="admin-list">${candidateAccounts.length ? candidateAccounts.map(candidate => `<div class="admin-row"><span><strong>${candidate.name || candidate.candidateName}</strong><small>${candidate.username} · ${candidate.partyName || 'Unassigned party'}</small></span><span class="approved">${candidate.status || 'APPROVED'}</span><button class="button small" data-account-view="candidate" data-account-id="${candidate.candidateId}">View</button><button class="button small" data-account-edit="candidate" data-account-id="${candidate.candidateId}">Edit</button></div>`).join('') : '<p class="intro">No candidate accounts created yet.</p>'}</div><h3>Voter approvals</h3><div class="admin-list">${voters.length ? voters.map(voterItem => `<div class="admin-row"><span><strong>${voterItem.name}</strong><small>${voterItem.voterId} · ${voterItem.status}</small></span>${voterItem.status === 'APPROVED' ? '<span class="approved">Approved</span>' : `<button class="button small" data-approve="${voterItem.voterId}">Approve</button>`}<button class="button small" data-account-view="voter" data-account-id="${voterItem.voterId}">View</button><button class="button small" data-account-edit="voter" data-account-id="${voterItem.voterId}">Edit</button></div>`).join('') : '<p class="intro">No voter registrations yet.</p>'}</div><h3>Create election</h3><form id="election-form" class="form-grid"><div class="field"><label>Election ID</label><input id="election-id" required placeholder="ELECTION2026"></div><div class="field"><label>Election name</label><input id="election-name" required placeholder="Election name"></div><div class="field"><label>Start date</label><input id="start-date" type="datetime-local" required></div><div class="field"><label>End date</label><input id="end-date" type="datetime-local" required></div><button class="button full">Create election</button></form><section id="admin-results" class="admin-results"><div class="results-heading"><div><h3>Election results &amp; records</h3><p>Vote totals and anonymized transaction records.</p></div><label for="results-election">Election</label><select id="results-election"></select></div><div id="results-error" class="notice error" role="alert" hidden></div><div id="results-content"><p class="intro">Select an election to load its recorded results.</p></div></section><button class="button secondary full" id="verify-ledger">VERIFY LEDGER</button><button class="button secondary full" id="admin-logout">Sign out</button>`);
   const securityHeading = [...document.querySelectorAll('.view h3')].find(heading => heading.textContent === 'Security overview');
   const faceEnabled = faceVerificationData.enabled !== false;
   if (securityHeading?.nextElementSibling) {
@@ -386,6 +561,26 @@ async function adminDashboard() {
     voterApprovalHeading.nextElementSibling.insertAdjacentHTML('afterend', `<h3>Face enrollment status</h3><div class="admin-list">${voters.length ? voters.map(item => `<div class="admin-row"><span><strong>${item.name}</strong><small>${item.voterId} · ${item.status} · ${item.faceEnrollment?.enrolled ? `Enrolled ${item.faceEnrollment.enrolledAt ? new Date(item.faceEnrollment.enrolledAt).toLocaleDateString() : ''}` : 'Face enrollment required'}</small></span><span class="${item.faceEnrollment?.enrolled ? 'approved' : ''}">${item.faceEnrollment?.enrolled ? 'Enrolled' : 'Required'}</span></div>`).join('') : '<p class="intro">No voters registered yet.</p>'}</div>`);
   }
   document.querySelectorAll('[data-approve]').forEach(button => button.onclick = async () => { await request(`/voters/${button.dataset.approve}/approve`, { method: 'PATCH', body: JSON.stringify({ status: 'APPROVED' }) }); adminDashboard(); });
+  const accountCollections = { voter: voters, officer: officers, candidate: candidateAccounts };
+  const accountIds = { voter: 'voterId', officer: 'officerId', candidate: 'candidateId' };
+  const accountRoutes = { voter: '/voters/', officer: '/officers/', candidate: '/candidate-accounts/' };
+  document.querySelectorAll('[data-account-view], [data-account-edit]').forEach(button => {
+    const type = button.dataset.accountView || button.dataset.accountEdit;
+    const item = accountCollections[type].find(record => record[accountIds[type]] === button.dataset.accountId);
+    const name = item?.name || item?.candidateName || item?.username || button.dataset.accountId;
+    button.setAttribute('aria-label', `${button.dataset.accountEdit ? 'Edit' : 'View'} ${type} account: ${name}`);
+    button.type = 'button';
+  });
+  document.querySelectorAll('[data-account-view]').forEach(button => button.onclick = () => {
+    const type = button.dataset.accountView;
+    const item = accountCollections[type].find(record => record[accountIds[type]] === button.dataset.accountId);
+    if (item) showAccountDetails(type, item, accountIds[type]);
+  });
+  document.querySelectorAll('[data-account-edit]').forEach(button => button.onclick = () => {
+    const type = button.dataset.accountEdit;
+    const item = accountCollections[type].find(record => record[accountIds[type]] === button.dataset.accountId);
+    if (item) editAccount(type, item, accountIds[type], accountRoutes[type], parties);
+  });
   document.querySelector('#party-form').onsubmit = async event => {
     event.preventDefault();
     try {
