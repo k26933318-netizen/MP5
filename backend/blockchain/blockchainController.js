@@ -193,7 +193,7 @@ module.exports = {
     }
     const images = requireFaceImages(request, 3, 3);
     const result = await faceClient.enrollFrames(images);
-    requireValidFaceAnalysis(result, { requireBackground: false, requireLiveness: false });
+    requireValidFaceAnalysis(result, { requireBackground: false });
 
     const encrypted = encryptEmbedding(result.embedding);
     const voter = await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
@@ -234,7 +234,7 @@ module.exports = {
         throw error;
       }
       const result = await faceClient.enrollFrames(images);
-      requireValidFaceAnalysis(result, { requireBackground: false, requireLiveness: false });
+      requireValidFaceAnalysis(result, { requireBackground: false });
       const encrypted = encryptEmbedding(result.embedding);
       await serializeFaceEnrollment(() => mongo.withFaceEnrollmentLock(async () => {
         await ensureFaceIsNotRegistered(result.embedding, result.model_version);

@@ -19,10 +19,10 @@ test('voter, admin, officer, and candidate credentials create the expected sessi
     ? { voterId: 'voter-test', name: 'Voter Test', status: 'APPROVED', passwordHash }
     : null;
   mongo.getElectionOfficerCredentials = async username => username === 'officer-test'
-    ? { officerId: 'OFF-TEST', username, name: 'Officer Test', passwordHash }
+    ? { officerId: 'OFF-TEST', username, name: 'Officer Test', status: 'APPROVED', passwordHash }
     : null;
   mongo.getCandidateCredentials = async username => username === 'candidate-test'
-    ? { candidateId: 'CAND-TEST', username, name: 'Candidate Test', passwordHash, partyId: 'PARTY-TEST' }
+    ? { candidateId: 'CAND-TEST', username, name: 'Candidate Test', status: 'APPROVED', passwordHash, partyId: 'PARTY-TEST' }
     : null;
 
   try {
@@ -50,6 +50,26 @@ test('voter, admin, officer, and candidate credentials create the expected sessi
     else process.env.ADMIN_USERNAME = previousAdminUsername;
     if (previousAdminPassword === undefined) delete process.env.ADMIN_PASSWORD;
     else process.env.ADMIN_PASSWORD = previousAdminPassword;
+  }
+});
+
+test('suspended election officers and candidates cannot sign in', async () => {
+  const originalGetOfficer = mongo.getElectionOfficerCredentials;
+  const originalGetCandidate = mongo.getCandidateCredentials;
+  const passwordHash = await bcrypt.hash('TestPass!123', 4);
+  mongo.getElectionOfficerCredentials = async () => ({
+    officerId: 'OFF-SUSPENDED', username: 'officer-suspended', status: 'SUSPENDED', passwordHash
+  });
+  mongo.getCandidateCredentials = async () => ({
+    candidateId: 'CAND-SUSPENDED', username: 'candidate-suspended', status: 'SUSPENDED', passwordHash
+  });
+
+  try {
+    await assert.rejects(() => auth.login({ role: 'election_officer', username: 'officer-suspended', password: 'TestPass!123' }), /Invalid election officer credentials/);
+    await assert.rejects(() => auth.login({ role: 'candidate', username: 'candidate-suspended', password: 'TestPass!123' }), /Invalid candidate credentials/);
+  } finally {
+    mongo.getElectionOfficerCredentials = originalGetOfficer;
+    mongo.getCandidateCredentials = originalGetCandidate;
   }
 });
 

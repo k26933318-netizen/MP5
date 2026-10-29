@@ -265,15 +265,25 @@ test('voter registration stores a face enrollment when no duplicate matches', as
   assert.equal(registrationArgs[2], 'arcface-test');
 });
 
-test('enrollment does not require a separate liveness challenge or passive anti-spoof result', async () => {
+test('enrollment requires anti-spoof validation without a separate head-movement challenge', async () => {
   const unrelated = Array(512).fill(0);
   unrelated[1] = 1;
   const { response, error } = await withRegistrationStubs([unrelated], {
-    checks: { position: true, quality: true, stable: true, head_movement: false, presentation_attack: false }
+    checks: { position: true, quality: true, stable: true, head_movement: false, presentation_attack: true }
   });
   assert.equal(error, undefined);
   assert.equal(response.statusCode, 201);
   assert.equal(response.payload.faceEnrollment.enrolled, true);
+});
+
+test('voter registration rejects a failed presentation-attack check', async () => {
+  const unrelated = Array(512).fill(0);
+  unrelated[1] = 1;
+  const { error, registerCalls } = await withRegistrationStubs([unrelated], {
+    checks: { position: true, quality: true, stable: true, head_movement: false, presentation_attack: false }
+  });
+  assert.equal(error.code, 'FACE_VALIDATION_FAILED');
+  assert.equal(registerCalls, 0);
 });
 
 test('enrollment still rejects a face that fails position, quality, or stability checks', async () => {

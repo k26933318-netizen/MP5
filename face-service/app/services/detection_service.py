@@ -263,11 +263,8 @@ class FaceRecognitionRuntime:
         else:
             raise ValueError("Unsupported face analysis mode.")
 
-        if mode == "verify":
-            live, score = anti_spoof.verify([(item["image"], item["box"]) for item in analysis])
-        else:
-            live, score = False, None
-        if not live and mode == "verify":
+        live, score = anti_spoof.verify([(item["image"], item["box"]) for item in analysis])
+        if not live:
             raise HTTPException(status_code=403, detail={
                 "code": "PRESENTATION_ATTACK_SUSPECTED",
                 "message": "We could not confirm a live face. Hold still to avoid blur, center your whole face in the guide, use steady lighting, and try again.",

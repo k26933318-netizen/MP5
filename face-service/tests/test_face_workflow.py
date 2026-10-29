@@ -1,5 +1,4 @@
 import unittest
-import asyncio
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -74,6 +73,15 @@ def webcam_frame(seed=0, background=(245, 245, 245)):
     cv2.ellipse(image, (320, 145), (95, 55), 0, 0, 360, (30, 30, 30), -1)
     image[0, 0, 0] = 0
     return image
+
+
+def run_immediate(awaitable):
+    """Run an async endpoint whose test doubles complete without yielding."""
+    try:
+        awaitable.send(None)
+    except StopIteration as completed:
+        return completed.value
+    raise AssertionError("The mocked endpoint unexpectedly required an event loop.")
 
 
 class FaceWorkflowTests(unittest.TestCase):
@@ -193,10 +201,11 @@ class FaceWorkflowTests(unittest.TestCase):
             "detect": lambda _self, _image: (np.empty((0, 5)), np.empty((0, 5, 2)))
         })()
         subject = FaceRecognitionRuntime(empty_detector, RecognizerStub(), "test-model")
-        with self.assertRaises(HTTPException) as raised:
-            subject.assess_position(frame(0))
-        self.assertEqual(raised.exception.detail["code"], "NO_FACE")
-        self.assertNotIn("surroundings", raised.exception.detail["message"].lower())
+        result = subject.assess_position(frame(0))
+        self.assertFalse(result["ready"])
+        self.assertIsNone(result["face"])
+        self.assertIn("no face", result["message"].lower())
+        self.assertNotIn("surroundings", result["message"].lower())
 
     def test_malformed_image_is_rejected_before_face_or_background_validation(self):
         with self.assertRaises(HTTPException) as raised:
@@ -205,7 +214,7 @@ class FaceWorkflowTests(unittest.TestCase):
 
     def test_public_assessment_response_does_not_expose_background_diagnostics(self):
         class RejectingRuntime:
-            def assess_position(self, _image, require_frontal=True):
+            def assess_position(self, _image, require_frontal=True, **_kwargs):
                 raise HTTPException(status_code=422, detail={
                     "code": "IMAGE_CONDITIONS_UNSUITABLE",
                     "message": "Adjust your surroundings and try again.",
@@ -217,7 +226,7 @@ class FaceWorkflowTests(unittest.TestCase):
                 patch("app.main.runtime", RejectingRuntime()), \
                 patch("app.main.read_upload", new=AsyncMock(return_value=b"test-image")), \
                 patch("app.main.decode_image", return_value=frame(0)):
-            response = asyncio.run(face_main.assess_position(
+            response = run_immediate(face_main.assess_position(
                 SimpleNamespace(content_type="image/jpeg"),
                 "test-key",
                 "position",
