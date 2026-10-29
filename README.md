@@ -9,6 +9,7 @@ VoteLedger is an electronic-voting prototype with voter, administrator, election
 - Voter registration captures three face frames and checks positioning, image quality, stability, presentation-attack scores, and duplicate enrollment before account creation; a white background is not required, and only the encrypted template is retained.
 - Admin approval; role-based sign-in for voters, admins, election officers, and candidates.
 - Party, alliance, candidate, officer, and election administration.
+- Election dates and lifecycle status can be edited; deletion is limited to unused draft elections in local-ledger mode, while Fabric records remain immutable.
 - Admins can review and edit voter, officer, and candidate profiles, manage account status, and record changes in the audit log.
 - Election lifecycle rules and voting-date validation.
 - Live camera feedback uses RetinaFace bounding boxes to move a tracking box independently of the fixed positioning guide. Enrollment allows a wider position range and does not require a white background; voting verification retains its stricter position and background checks.

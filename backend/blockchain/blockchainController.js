@@ -436,8 +436,16 @@ module.exports = {
   registerElection: send(['electionId', 'electionName', 'startDate', 'endDate'], input => service.registerElection(input)),
   updateElection: asyncRoute(async (request, response) => {
     const input = body(request);
-    return response.json({ success: true, election: await service.updateElectionState(request.params.electionId, input.status || 'UPCOMING', request.user?.username || 'ADMIN') });
+    const updates = {};
+    for (const field of ['electionName', 'startDate', 'endDate', 'status']) {
+      if (Object.hasOwn(input, field)) updates[field] = input[field];
+    }
+    return response.json({ success: true, election: await service.updateElection(request.params.electionId, updates, request.user?.username || 'ADMIN') });
   }),
+  deleteElection: asyncRoute(async (request, response) => response.json({
+    success: true,
+    election: await service.deleteElection(request.params.electionId, request.user?.username || 'ADMIN')
+  })),
   getElectionStats: asyncRoute(async (request, response) => {
     const election = await mongo.getElection(request.params.electionId);
     if (!election) throw Object.assign(new Error('Election does not exist'), { statusCode: 404 });

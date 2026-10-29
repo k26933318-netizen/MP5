@@ -91,6 +91,7 @@ router.get('/admin/settings/face-verification', auth.requireRole('admin'), contr
 router.patch('/admin/settings/face-verification', auth.requireRole('admin'), controller.updateFaceVerificationSetting);
 router.post('/elections', auth.requireRole('admin'), controller.registerElection);
 router.patch('/elections/:electionId', auth.requireRole('admin'), controller.updateElection);
+router.delete('/elections/:electionId', auth.requireRole('admin'), controller.deleteElection);
 router.get('/elections', auth.requireAuth, controller.listElections);
 router.get('/elections/:electionId/stats', auth.requireRole('admin'), controller.getElectionStats);
 router.post('/candidates', auth.requireRole('admin'), controller.registerCandidate);

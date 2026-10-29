@@ -149,13 +149,65 @@ class BlockchainService {
     return candidate;
   }
   async updateElectionState(electionId, nextStatus, actor = 'SYSTEM') {
+    return this.updateElection(electionId, { status: nextStatus }, actor);
+  }
+  async updateElection(electionId, updates, actor = 'SYSTEM') {
     const election = await this.repository.getElection(electionId);
     if (!election) throw new Error('Election does not exist');
-    if (!this.repository.VALID_ELECTION_STATES.includes(nextStatus)) throw new Error('Invalid election status');
-    this.repository.validateElectionStateTransition(election.status, nextStatus);
-    const updated = await this.repository.updateElection(electionId, { status: nextStatus }, actor);
-    await this.syncElection(electionId);
+    const changes = {};
+    for (const field of ['electionName', 'startDate', 'endDate', 'status']) {
+      if (Object.hasOwn(updates || {}, field)) changes[field] = updates[field];
+    }
+    if (!Object.keys(changes).length) {
+      const error = new Error('Provide election details or a new status.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const detailsChanged = ['electionName', 'startDate', 'endDate'].some(field =>
+      Object.hasOwn(changes, field) && changes[field] !== election[field]
+    );
+    if (detailsChanged && typeof this.adapter.syncElection === 'function') {
+      const error = new Error('Election details are immutable after being recorded on Hyperledger Fabric.');
+      error.statusCode = 409;
+      throw error;
+    }
+    if (detailsChanged && (await this.adapter.getElectionVotes(electionId)).length) {
+      const error = new Error('Election details cannot change after votes have been recorded.');
+      error.statusCode = 409;
+      throw error;
+    }
+    if (changes.status && changes.status !== election.status) {
+      if (!this.repository.VALID_ELECTION_STATES.includes(changes.status)) throw new Error('Invalid election status');
+      this.repository.validateElectionStateTransition(election.status, changes.status);
+    }
+    const updated = await this.repository.updateElection(electionId, changes, actor);
+    if (changes.status && changes.status !== election.status) await this.syncElection(electionId);
     return updated;
+  }
+  async deleteElection(electionId, actor = 'SYSTEM') {
+    if (typeof this.adapter.syncElection === 'function') {
+      const error = new Error('Elections recorded on Hyperledger Fabric cannot be deleted.');
+      error.statusCode = 409;
+      throw error;
+    }
+    const election = await this.repository.getElection(electionId);
+    if (!election) throw new Error('Election does not exist');
+    if (election.status !== 'DRAFT') {
+      const error = new Error('Only an unused draft election can be deleted.');
+      error.statusCode = 409;
+      throw error;
+    }
+    if ((await this.adapter.getElectionVotes(electionId)).length) {
+      const error = new Error('An election with recorded votes cannot be deleted.');
+      error.statusCode = 409;
+      throw error;
+    }
+    if ((await this.repository.getCandidates(electionId)).length) {
+      const error = new Error('Remove all linked candidates before deleting this draft.');
+      error.statusCode = 409;
+      throw error;
+    }
+    return this.repository.deleteElection(electionId, actor);
   }
   async castVote(input) {
     const voter = await this.repository.getVoterCredentials(input.voterId);

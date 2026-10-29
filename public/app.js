@@ -513,6 +513,169 @@ function editAccount(type, item, idField, route, parties) {
   });
 }
 
+const electionTransitions = {
+  DRAFT: ['UPCOMING', 'ACTIVE', 'CLOSED', 'RESULTS_DECLARED'],
+  UPCOMING: ['ACTIVE', 'CLOSED', 'RESULTS_DECLARED'],
+  ACTIVE: ['CLOSED', 'RESULTS_DECLARED'],
+  CLOSED: ['RESULTS_DECLARED'],
+  RESULTS_DECLARED: []
+};
+
+function toLocalDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function editElection(item) {
+  const fabricMode = ledgerMode === 'fabric';
+  const fields = [];
+  if (!fabricMode) {
+    fields.push(
+      { name: 'electionName', label: 'Election name', value: item.electionName, required: true },
+      { name: 'startDate', label: 'Start date', value: toLocalDateTime(item.startDate), type: 'datetime-local', required: true },
+      { name: 'endDate', label: 'End date', value: toLocalDateTime(item.endDate), type: 'datetime-local', required: true }
+    );
+  }
+  const statuses = [item.status, ...(electionTransitions[item.status] || [])];
+  fields.push({ name: 'status', label: 'Election status', value: item.status, options: [...new Set(statuses)] });
+  const { dialog, panel } = createAccountDialog('Edit election', `Update ${item.electionName}.`);
+  if (fabricMode) {
+    const note = document.createElement('p');
+    note.className = 'notice';
+    note.textContent = 'Election name and dates are fixed on Hyperledger Fabric. You can move this election through its allowed status changes.';
+    panel.append(note);
+  }
+  const form = document.createElement('form');
+  form.className = 'account-edit-form';
+  fields.forEach(field => appendAccountInput(form, field));
+  const error = document.createElement('div');
+  error.className = 'notice error account-edit-error';
+  error.setAttribute('role', 'alert');
+  error.hidden = true;
+  form.append(error);
+  const actions = document.createElement('div');
+  actions.className = 'account-dialog-actions';
+  const cancel = document.createElement('button');
+  cancel.className = 'button secondary';
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => dialog.close());
+  const save = document.createElement('button');
+  save.className = 'button';
+  save.type = 'submit';
+  save.textContent = 'Save changes';
+  actions.append(cancel, save);
+  form.append(actions);
+  panel.append(form);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const updates = Object.fromEntries(new FormData(form).entries());
+    if (!fabricMode) {
+      updates.startDate = new Date(updates.startDate).toISOString();
+      updates.endDate = new Date(updates.endDate).toISOString();
+    }
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    error.hidden = true;
+    try {
+      await request(`/elections/${encodeURIComponent(item.electionId)}`, { method: 'PATCH', body: JSON.stringify(updates) });
+      dialog.close();
+      await adminDashboard();
+    } catch (saveError) {
+      error.textContent = saveError.message;
+      error.hidden = false;
+      save.disabled = false;
+      save.textContent = 'Save changes';
+    }
+  });
+}
+
+function addElectionManagement(elections) {
+  const section = document.createElement('section');
+  section.className = 'election-management';
+  const heading = document.createElement('h3');
+  heading.textContent = 'Election schedule and status';
+  const description = document.createElement('p');
+  description.className = 'intro';
+  description.textContent = ledgerMode === 'fabric'
+    ? 'Election details recorded on Fabric are immutable. Status changes follow the election lifecycle.'
+    : 'Review election dates, update lifecycle status, or remove an unused draft.';
+  const list = document.createElement('div');
+  list.className = 'admin-list';
+  if (!elections.length) {
+    const empty = document.createElement('p');
+    empty.className = 'election-empty';
+    empty.textContent = 'No elections have been created yet.';
+    list.append(empty);
+  }
+  elections.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'admin-row election-row';
+    const summary = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = item.electionName;
+    const dates = document.createElement('small');
+    const start = item.startDate ? new Date(item.startDate).toLocaleString() : 'Start date unavailable';
+    const end = item.endDate ? new Date(item.endDate).toLocaleString() : 'End date unavailable';
+    dates.textContent = `${item.electionId} · ${start} to ${end}`;
+    summary.append(name, dates);
+    const status = document.createElement('span');
+    status.className = 'election-status';
+    status.textContent = item.status;
+    row.append(summary, status);
+    const edit = document.createElement('button');
+    edit.className = 'button small';
+    edit.type = 'button';
+    edit.textContent = 'Edit';
+    edit.setAttribute('aria-label', `Edit election ${item.electionName}`);
+    edit.addEventListener('click', () => editElection(item));
+    row.append(edit);
+    if (item.status === 'DRAFT' && ledgerMode !== 'fabric') {
+      const remove = document.createElement('button');
+      remove.className = 'button small danger';
+      remove.type = 'button';
+      remove.textContent = 'Delete draft';
+      remove.setAttribute('aria-label', `Delete draft election ${item.electionName}`);
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Delete “${item.electionName}”? Only unused drafts can be deleted.`)) return;
+        remove.disabled = true;
+        try {
+          await request(`/elections/${encodeURIComponent(item.electionId)}`, { method: 'DELETE' });
+          await adminDashboard();
+        } catch (error) {
+          remove.disabled = false;
+          window.alert(error.message);
+        }
+      });
+      row.append(remove);
+    }
+    list.append(row);
+  });
+  section.append(heading, description, list);
+  const form = document.querySelector('#election-form');
+  const statusField = document.createElement('div');
+  statusField.className = 'field';
+  const statusLabel = document.createElement('label');
+  statusLabel.htmlFor = 'election-status';
+  statusLabel.textContent = 'Starting status';
+  const statusSelect = document.createElement('select');
+  statusSelect.id = 'election-status';
+  statusSelect.name = 'status';
+  ['DRAFT', 'UPCOMING', 'ACTIVE'].forEach(value => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    statusSelect.append(option);
+  });
+  statusSelect.value = 'UPCOMING';
+  statusField.append(statusLabel, statusSelect);
+  form.insertBefore(statusField, form.querySelector('button'));
+  form.after(section);
+}
+
 async function adminDashboard() {
   const sidebar = document.querySelector('.sidebar');
   sidebar.classList.add('admin-sidebar');
@@ -536,6 +699,7 @@ async function adminDashboard() {
     ? { integrity: { status: 'Fabric peer ledger' } }
     : await request('/ledger/TN-ASSEMBLY-2026/integrity').catch(() => ({ integrity: { status: 'UNKNOWN', recordsChecked: 0, brokenLinks: 0, invalidHashes: 0, verifiedAt: new Date().toISOString() } }));
   view(`<div class="kicker">Admin console</div><h2>Election management</h2><p class="intro">Manage voter approvals, party and alliance records, election officers, and candidate accounts from one control panel.</p><div class="receipt"><div class="receipt-line"><span>Signed in as</span><strong>${currentUser.username}</strong></div><div class="receipt-line"><span>Permission</span><strong>Administrator</strong></div></div><h3>Security overview</h3><div class="receipt"><div class="receipt-line"><span>Total elections</span><strong>${elections.length}</strong></div><div class="receipt-line"><span>Approved voters</span><strong>${voters.filter(v => v.status === 'APPROVED').length}</strong></div><div class="receipt-line"><span>Registered parties</span><strong>${parties.length}</strong></div><div class="receipt-line"><span>Ledger status</span><strong>${integrity.integrity.status}</strong></div></div><h3>Party management</h3><form id="party-form" class="form-grid"><div class="field"><label>Party ID</label><input id="party-id" required placeholder="PARTY-001"></div><div class="field"><label>Party name</label><input id="party-name" required placeholder="Party name"></div><div class="field"><label>Party symbol</label><input id="party-symbol" placeholder="e.g. Lotus"></div><div class="field"><label>President name</label><input id="party-president" placeholder="President name"></div><div class="field"><label>Founded year</label><input id="party-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Add party</button></form><div class="admin-list">${parties.length ? parties.map(party => `<div class="admin-row"><span><strong>${party.partyName}</strong><small>${party.partyId}${party.partySymbol ? ` · ${party.partySymbol}` : ''}</small></span><span class="approved">${party.presidentName || 'Party'}</span></div>`).join('') : '<p class="intro">No parties added yet.</p>'}</div><h3>Alliance management</h3><form id="alliance-form" class="form-grid"><div class="field"><label>Alliance ID</label><input id="alliance-id" required placeholder="ALLIANCE-001"></div><div class="field"><label>Alliance name</label><input id="alliance-name" required placeholder="Alliance name"></div><div class="field"><label>Alliance symbol</label><input id="alliance-symbol" placeholder="Symbol"></div><div class="field"><label>Leader party</label><select id="leader-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Formed year</label><input id="alliance-year" type="number" min="1900" max="2100" value="2024"></div><button class="button full">Create alliance</button></form><div class="admin-list">${alliances.length ? alliances.map(alliance => `<div class="admin-row"><span><strong>${alliance.allianceName}</strong><small>${alliance.allianceId} · ${alliance.leaderPartyId || 'No leader'}</small></span><span class="approved">${alliance.allianceSymbol || 'Alliance'}</span></div>`).join('') : '<p class="intro">No alliances created yet.</p>'}</div><h3>Election officer management</h3><form id="officer-form" class="form-grid"><div class="field"><label>Officer ID</label><input id="officer-id" required placeholder="OFF-001"></div><div class="field"><label>Name</label><input id="officer-name" required placeholder="Officer name"></div><div class="field"><label>Username</label><input id="officer-username" required placeholder="Officer username"></div><div class="field"><label>Email</label><input id="officer-email" type="email" placeholder="officer@voteledger.gov"></div><div class="field"><label>Contact number</label><input id="officer-phone" placeholder="Contact number"></div><div class="field"><label>Password</label><input id="officer-password" type="password" required placeholder="Secure password"></div><button class="button full">Add officer</button></form><div class="admin-list">${officers.length ? officers.map(officer => `<div class="admin-row"><span><strong>${officer.name}</strong><small>${officer.username} · ${officer.role || 'ELECTION_OFFICER'}</small></span><span class="approved">${officer.status || 'APPROVED'}</span><button class="button small" data-account-view="officer" data-account-id="${officer.officerId}">View</button><button class="button small" data-account-edit="officer" data-account-id="${officer.officerId}">Edit</button></div>`).join('') : '<p class="intro">No officers added yet.</p>'}</div><h3>Candidate account management</h3><form id="candidate-form" class="form-grid"><div class="field"><label>Candidate ID</label><input id="candidate-id" required placeholder="CAND-001"></div><div class="field"><label>Candidate name</label><input id="candidate-name" required placeholder="Candidate full name"></div><div class="field"><label>Username</label><input id="candidate-username" required placeholder="Candidate username"></div><div class="field"><label>Email</label><input id="candidate-email" type="email" placeholder="candidate@example.com"></div><div class="field"><label>Phone</label><input id="candidate-phone" placeholder="Phone number"></div><div class="field"><label>Party</label><select id="candidate-party-id" required>${parties.length ? parties.map(party => `<option value="${party.partyId}">${party.partyName}</option>`).join('') : '<option value="">Add a party first</option>'}</select></div><div class="field"><label>Election ID</label><input id="candidate-election-id" placeholder="TN-ASSEMBLY-2026"></div><div class="field"><label>Password</label><input id="candidate-password" type="password" required placeholder="Candidate password"></div><button class="button full">Add candidate account</button></form><div class="admin-list">${candidateAccounts.length ? candidateAccounts.map(candidate => `<div class="admin-row"><span><strong>${candidate.name || candidate.candidateName}</strong><small>${candidate.username} · ${candidate.partyName || 'Unassigned party'}</small></span><span class="approved">${candidate.status || 'APPROVED'}</span><button class="button small" data-account-view="candidate" data-account-id="${candidate.candidateId}">View</button><button class="button small" data-account-edit="candidate" data-account-id="${candidate.candidateId}">Edit</button></div>`).join('') : '<p class="intro">No candidate accounts created yet.</p>'}</div><h3>Voter approvals</h3><div class="admin-list">${voters.length ? voters.map(voterItem => `<div class="admin-row"><span><strong>${voterItem.name}</strong><small>${voterItem.voterId} · ${voterItem.status}</small></span>${voterItem.status === 'APPROVED' ? '<span class="approved">Approved</span>' : `<button class="button small" data-approve="${voterItem.voterId}">Approve</button>`}<button class="button small" data-account-view="voter" data-account-id="${voterItem.voterId}">View</button><button class="button small" data-account-edit="voter" data-account-id="${voterItem.voterId}">Edit</button></div>`).join('') : '<p class="intro">No voter registrations yet.</p>'}</div><h3>Create election</h3><form id="election-form" class="form-grid"><div class="field"><label>Election ID</label><input id="election-id" required placeholder="ELECTION2026"></div><div class="field"><label>Election name</label><input id="election-name" required placeholder="Election name"></div><div class="field"><label>Start date</label><input id="start-date" type="datetime-local" required></div><div class="field"><label>End date</label><input id="end-date" type="datetime-local" required></div><button class="button full">Create election</button></form><section id="admin-results" class="admin-results"><div class="results-heading"><div><h3>Election results &amp; records</h3><p>Vote totals and anonymized transaction records.</p></div><label for="results-election">Election</label><select id="results-election"></select></div><div id="results-error" class="notice error" role="alert" hidden></div><div id="results-content"><p class="intro">Select an election to load its recorded results.</p></div></section><button class="button secondary full" id="verify-ledger">VERIFY LEDGER</button><button class="button secondary full" id="admin-logout">Sign out</button>`);
+  addElectionManagement(elections);
   const securityHeading = [...document.querySelectorAll('.view h3')].find(heading => heading.textContent === 'Security overview');
   const faceEnabled = faceVerificationData.enabled !== false;
   if (securityHeading?.nextElementSibling) {
@@ -617,7 +781,7 @@ async function adminDashboard() {
       adminDashboard();
     } catch (error) { document.querySelector('#candidate-form').insertAdjacentHTML('afterend', `<div class="notice error">${error.message}</div>`); }
   };
-  document.querySelector('#election-form').onsubmit = async event => { event.preventDefault(); try { await request('/elections', { method: 'POST', body: JSON.stringify({ electionId: document.querySelector('#election-id').value.trim(), electionName: document.querySelector('#election-name').value.trim(), startDate: new Date(document.querySelector('#start-date').value).toISOString(), endDate: new Date(document.querySelector('#end-date').value).toISOString(), status: 'ACTIVE' }) }); adminDashboard(); } catch (error) { document.querySelector('#election-form').insertAdjacentHTML('afterend', `<div class="notice error">${error.message}</div>`); } };
+  document.querySelector('#election-form').onsubmit = async event => { event.preventDefault(); try { await request('/elections', { method: 'POST', body: JSON.stringify({ electionId: document.querySelector('#election-id').value.trim(), electionName: document.querySelector('#election-name').value.trim(), startDate: new Date(document.querySelector('#start-date').value).toISOString(), endDate: new Date(document.querySelector('#end-date').value).toISOString(), status: document.querySelector('#election-status').value }) }); await adminDashboard(); } catch (error) { const message = document.createElement('div'); message.className = 'notice error'; message.textContent = error.message; document.querySelector('#election-form').after(message); } };
   document.querySelector('#admin-results-link').onclick = event => {
     event.preventDefault();
     document.querySelector('#admin-results').scrollIntoView({ behavior: 'smooth', block: 'start' });

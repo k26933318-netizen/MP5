@@ -196,6 +196,14 @@ body { background:#f2f5fa; }
 .account-detail-list dd { overflow-wrap:anywhere; color:#26344a; font-weight:600; }
 .admin-row > span:first-child { min-width:100px; flex:1; }
 .admin-row > .button.small { flex:0 0 auto; }
+.election-management { margin:6px 0 30px; }
+.election-management .intro { margin:0 0 15px; font-size:13px; }
+.election-row > span:first-child { min-width:220px; }
+.election-row small { max-width:560px; }
+.election-status { flex:0 0 auto; padding:6px 10px; border-radius:999px; color:#4439a9; background:#f0efff; font-size:10px; font-weight:700; letter-spacing:.04em; }
+.button.danger { background:#fff0f0; color:#a32b2b; box-shadow:none; }
+.button.danger:hover { background:#ffe1e1; }
+.election-empty { margin:0; padding:18px; color:var(--muted); font-size:13px; }
 @media (max-width:520px) {
   .account-edit-form { grid-template-columns:1fr; gap:13px; }
   .account-edit-error,.account-dialog-actions { grid-column:auto; }

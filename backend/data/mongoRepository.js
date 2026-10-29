@@ -276,8 +276,23 @@ async function updateElection(electionId, updates, actor = null) {
   const election = await getElection(electionId);
   if (!election) throw new Error('Election does not exist');
   const nextStatus = updates.status || election.status;
-  validateElectionStateTransition(election.status, nextStatus);
+  if (nextStatus !== election.status) validateElectionStateTransition(election.status, nextStatus);
   const merged = { ...election, ...updates, updatedAt: new Date() };
+  if (!String(merged.electionName || '').trim()) {
+    const error = new Error('Election name is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!VALID_ELECTION_STATES.includes(merged.status)) {
+    const error = new Error('Invalid election status.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!Number.isFinite(Date.parse(merged.startDate)) || !Number.isFinite(Date.parse(merged.endDate)) || Date.parse(merged.startDate) >= Date.parse(merged.endDate)) {
+    const error = new Error('Election end date must be after its start date.');
+    error.statusCode = 400;
+    throw error;
+  }
   await (await db()).collection('elections').updateOne({ electionId }, { $set: merged });
   await logAudit('ELECTION_UPDATED', {
     actorId: actor || 'SYSTEM',
@@ -288,6 +303,45 @@ async function updateElection(electionId, updates, actor = null) {
     description: `Election ${electionId} updated to ${nextStatus}`
   });
   return merged;
+}
+
+async function deleteElection(electionId, actor = null) {
+  const database = await db();
+  const election = await database.collection('elections').findOne({ electionId }, { projection: { _id: 0, status: 1 } });
+  if (!election) {
+    const error = new Error('Election does not exist.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (election.status !== 'DRAFT') {
+    const error = new Error('Only an unused draft election can be deleted.');
+    error.statusCode = 409;
+    throw error;
+  }
+  const [candidateCount, voteClaimCount] = await Promise.all([
+    database.collection('candidates').countDocuments({ electionId }),
+    database.collection('voteClaims').countDocuments({ electionId })
+  ]);
+  if (candidateCount || voteClaimCount) {
+    const error = new Error('This draft has linked candidates or vote records and cannot be deleted.');
+    error.statusCode = 409;
+    throw error;
+  }
+  const result = await database.collection('elections').deleteOne({ electionId, status: 'DRAFT' });
+  if (!result.deletedCount) {
+    const error = new Error('The election changed while it was being deleted. Refresh and try again.');
+    error.statusCode = 409;
+    throw error;
+  }
+  await logAudit('ELECTION_DELETED', {
+    actorId: actor || 'ADMIN',
+    actorRole: actor ? 'ADMIN' : 'SYSTEM',
+    resourceType: 'ELECTION',
+    resourceId: electionId,
+    status: 'SUCCESS',
+    description: `Unused draft election ${electionId} deleted.`
+  });
+  return { electionId, deleted: true };
 }
 
 async function createCandidate(input) {
@@ -805,6 +859,7 @@ module.exports = {
   getCandidate,
   createElection,
   updateElection,
+  deleteElection,
   createCandidate,
   registerParty,
   updatePartyLogo,
